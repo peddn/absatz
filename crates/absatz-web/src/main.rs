@@ -40,6 +40,12 @@ fn App() -> impl IntoView {
             <h1>"Absatz"</h1>
             <span>"M1 · Schreibkern (Spike)"</span>
         </header>
+        {(!editor::supported()).then(|| view! {
+            <p class="notice" role="alert">
+                "Bearbeiten geht nur in Chrome, Edge oder Chromium (ab Version 121). "
+                "In diesem Browser kannst du das Dokument nur ansehen."
+            </p>
+        })}
         <main class="layout">
             <article class="absatz-doc" lang=styles.lang.clone() node_ref=doc_ref></article>
             <aside class="panel">

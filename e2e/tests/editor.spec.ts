@@ -39,6 +39,24 @@ test.beforeEach(async ({ page }) => {
   await expect(blocks(page).nth(2)).toBeVisible();
 });
 
+test("browsers without EditContext get a clear notice, no crash", async ({ page }) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.addInitScript(() => delete (window as any).EditContext);
+  await page.goto("./");
+  await expect(page.getByRole("alert")).toContainText("Chrome, Edge oder Chromium");
+  await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1");
+  expect(errors).toEqual([]);
+});
+
+test("a real mouse click puts the caret where you click", async ({ page }) => {
+  await expect(page.getByRole("alert")).toHaveCount(0);
+  const heading = blocks(page).nth(2); // "Abschnitt 1.1"
+  await heading.click({ position: { x: 2, y: 5 } });
+  await page.keyboard.type(">");
+  await expect(heading).toHaveText(">Abschnitt 1.1");
+});
+
 // Sample document: 0 outline, 1 h1 "Kapitel 1: …", 2 h2 "Abschnitt 1.1", 3 body, 4 body, …
 
 test("typing goes through EditContext into the model", async ({ page }) => {
@@ -100,6 +118,29 @@ test("IME composition (CDP) commits text", async ({ page }) => {
   await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1日本");
   await page.keyboard.type("!");
   await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1日本!");
+});
+
+test("typing keeps the text node (spellcheck markers survive)", async ({ page }) => {
+  await caret(page, 3);
+  await page.evaluate(() => ((window as any).__node = getSelection()!.anchorNode));
+  await page.keyboard.type(" bleibt");
+  await page.keyboard.press("Backspace");
+  const state = await page.evaluate(() => {
+    const n = (window as any).__node as Text;
+    return { connected: n.isConnected, end: n.data.slice(-6) };
+  });
+  expect(state).toEqual({ connected: true, end: " bleib" });
+});
+
+test("deleting inside a block is native: characters and whole words", async ({ page }) => {
+  await caret(page, 2); // "Abschnitt 1.1"
+  await page.keyboard.press("Backspace");
+  await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.");
+  await page.keyboard.press("Control+Backspace");
+  await page.keyboard.press("Control+Backspace");
+  await expect(blocks(page).nth(2)).not.toContainText("1");
+  await page.keyboard.press("Control+z");
+  await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1");
 });
 
 test("undo and redo restore text, blocks and caret", async ({ page }) => {

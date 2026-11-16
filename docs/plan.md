@@ -1,7 +1,7 @@
 # Absatz – Projektplan
 
 Leitfaden für die Umsetzung. Lebendes Dokument: Änderungen per PR, Entscheidungen zusätzlich in [`decisions.md`](decisions.md).
-Stand: 16.11.2026 · Aktueller Meilenstein: **M1 – Spike und Undo fertig, als Nächstes Zeichenvorlagen und Zwischenablage**
+Stand: 16.11.2026 · Aktueller Meilenstein: **M1 – Spike und Undo fertig, als Nächstes der Durchstich (Tippen → Vorschau → PDF)**
 
 ---
 
@@ -181,7 +181,19 @@ Jeder Meilenstein endet mit grüner CI, aktualisiertem Plan und Tag `v0.<n>.0`.
 
 Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (CRDT wie Loro, nur dann nachgeladen – siehe #16), freier Vorlageneditor.
 
-### M1 im Detail (nächster Schritt)
+### Reihenfolge nach der kritischen Durchsicht (#17)
+
+Die Meilensteine bleiben als Themen bestehen, die Reihenfolge der nächsten Schritte ändert sich:
+
+1. ✅ Tippen ändert nur den Textknoten; Löschen im Block macht der Browser (klärt die Rechtschreibprüfung – manuelle Bestätigung offen).
+2. **Durchstich:** Tippen → Live-Vorschau → PDF, Fehler je Block abfangen (kaputte Formel, unbekannte Vorlage), automatisches Speichern (OPFS).
+3. **Sichtbare Vorlagenauswahl** (aktuelle Vorlage anzeigen und wählen), Einfügen und Ausschneiden.
+4. Worker-Größe messen (Typst ohne Schriften), Budget danach festlegen; Vorratscode entfernen (Raster-Export, Benchmark-Knopf in der App).
+5. Danach: Zeichenvorlagen, weitere Inhalte.
+
+Bekannte Abweichungen Schreibansicht ↔ Seiten (bewusst „ähnlich“, nicht „gleich“): Dokumentschrift wird in der Schreibansicht noch nicht geladen, Überschriften-Nummern fehlen dort, Zeilenabstand nur angenähert.
+
+### M1 im Detail
 
 1. ✅ **Spike:** EditContext + direkter DOM-Renderer, Editieroperationen in `core::edit`, e2e-Tests für Tippen, Pfeiltasten, Enter, Rückschritt, Auswahl über Blöcke, Vorlagenkürzel, IME, Latenz bei 100 Seiten. Entscheidung #15. Offen: Rechtschreibprüfung manuell bestätigen.
 2. ✅ **Rückgängig/Wiederholen** im Kern (`core::history`, Strg+Z, Strg+Umschalt+Z, Strg+Y). Loro verworfen (#16).

@@ -63,3 +63,7 @@ Der Dokumentbereich wird von `editor/dom.rs` direkt ins DOM gerendert (Kind *i* 
 `core::history` speichert je Änderung den betroffenen Blockbereich vorher/nachher; Tippen im selben Block wird bis 1 s Pause zusammengefasst. Gespeichert wird `model::Document` als JSON (M4).
 *Warum:* Gemessen erhöht Loro das Haupt-Wasm von 118 KB auf 1 183 KB gzip – fast das Dreifache des Budgets (400 KB) – und bringt vor allem Zusammenarbeit, die erst nach 1.0 geplant ist. Das eigene Undo sind ~150 Zeilen, kostet 0,3–0,6 ms je Eingabe (p95 2,7 ms bei 100 Seiten) und keine Abhängigkeit.
 *Folge:* Für gemeinsames Bearbeiten nach 1.0 wird ein CRDT nötig. Es wird dann nur in dieser Situation nachgeladen; die wenigen Operationen in `core::edit` sind die Stelle, an der es andockt.
+
+**#17 · 2026-11-16 · gilt — Erst der Durchstich, dann Feinschliff**
+Nach einer kritischen Durchsicht: Editor und Satz waren nicht verbunden, nichts wurde gespeichert, die Vorlagen-Idee war in der Oberfläche unsichtbar. Neue Reihenfolge siehe `plan.md` („Reihenfolge nach der kritischen Durchsicht“).
+Dazu im Editor: Tippen ändert Textknoten an Ort und Stelle, Löschen innerhalb eines Blocks bleibt beim Browser (Regel „Chromium nutzen statt nachbauen“). Die Schreibansicht verspricht ein ähnliches, kein identisches Aussehen wie die Seiten.

@@ -35,10 +35,19 @@ struct Editor {
     history: History,
 }
 
+/// Whether this browser can edit: EditContext exists only in Chromium (≥ 121).
+pub fn supported() -> bool {
+    js_sys::Reflect::has(&js_sys::global(), &"EditContext".into()).unwrap_or(false)
+}
+
+/// Render the document into `root` and make it editable if [`supported`].
 pub fn mount(root: HtmlElement, doc: Document, styles: StyleSet) {
     let dom = root.owner_document().expect("attached to a document");
     for block in &doc.blocks {
         let _ = root.append_child(&dom::render_block(&dom, block, &styles));
+    }
+    if !supported() {
+        return; // read-only; the app shows a notice (decision #2: no fallbacks)
     }
     let _ = root.set_attribute("role", "textbox");
     let _ = root.set_attribute("aria-multiline", "true");
@@ -130,7 +139,9 @@ impl Editor {
             );
             self.doc.delete(Pos::new(b, rs), Pos::new(b, re));
             self.doc.insert_text(Pos::new(b, rs), &text);
-            self.rerender_range(b, 1, 1);
+            if !dom::replace_text(&self.root, b, rs, re, &text) {
+                self.rerender_range(b, 1, 1);
+            }
             self.anchor = Pos::new(b, ev.selection_start() as usize);
             self.focus = Pos::new(b, ev.selection_end() as usize);
             dom::set_selection(&self.root, self.anchor, self.focus);
@@ -174,14 +185,23 @@ impl Editor {
                 self.record(from.block, before, 2, sel_before, Kind::Other);
             }
             key @ ("Backspace" | "Delete") => {
-                ev.prevent_default();
+                // Inside one block the browser deletes via the EditContext
+                // (characters, words, grapheme clusters). We only handle
+                // deletions that cross a block boundary.
                 let (from, to) = if from != to {
+                    if from.block == to.block {
+                        return;
+                    }
                     (from, to)
                 } else {
                     let Some(other) = self.doc.step(self.focus, key == "Delete") else {
                         return;
                     };
+                    if other.block == self.focus.block {
+                        return;
+                    }
                     if other.block.abs_diff(self.focus.block) > 1 {
+                        ev.prevent_default();
                         return; // never swallow a table or formula in between
                     }
                     if other < self.focus {
@@ -190,6 +210,7 @@ impl Editor {
                         (self.focus, other)
                     }
                 };
+                ev.prevent_default();
                 let before = self.blocks(from.block, to.block);
                 self.doc.delete(from, to);
                 self.rerender_range(from.block, to.block - from.block + 1, 1);
@@ -362,21 +383,20 @@ fn now() -> f64 {
         .map_or(0.0, |p| p.now())
 }
 
-/// Latency per input, exposed as `window.__absatzLatency` for tests:
+/// Latency per input, collected only while `window.__absatzLatency` is an
+/// array (set `__absatzLatency = []` in the console or a test):
 /// `handler` = our work, `frame` = event creation → next animation frame.
 fn record_latency(started: f64, event_time: f64) {
     let Some(window) = web_sys::window() else {
         return;
     };
     let key = JsValue::from_str("__absatzLatency");
-    let list = js_sys::Reflect::get(&window, &key)
+    let Some(list) = js_sys::Reflect::get(&window, &key)
         .ok()
         .and_then(|v| v.dyn_into::<js_sys::Array>().ok())
-        .unwrap_or_else(|| {
-            let a = js_sys::Array::new();
-            let _ = js_sys::Reflect::set(&window, &key, &a);
-            a
-        });
+    else {
+        return;
+    };
     let entry = js_sys::Object::new();
     let _ = js_sys::Reflect::set(&entry, &"handler".into(), &(now() - started).into());
     list.push(&entry);
