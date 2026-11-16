@@ -173,6 +173,20 @@ test("copy, cut and paste with real keys; lines become paragraphs", async ({ pag
   await expect(blocks(page)).toHaveCount(count - 1);
 });
 
+test("the browser never edits the DOM itself (formatting keys, no stray nodes)", async ({ page }) => {
+  await caret(page, 3, 2, 3, 12);
+  const before = await blocks(page).nth(3).innerHTML();
+  for (const key of ["Control+b", "Control+i", "Control+u"]) await page.keyboard.press(key);
+  expect(await blocks(page).nth(3).innerHTML()).toBe(before);
+  await caret(page, 3);
+  await page.keyboard.type("ab");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("cd");
+  // Only our own elements: no <div>/<br> inserted by contenteditable.
+  expect(await blocks(page).nth(4).evaluate((e) => [e.tagName, e.className, e.innerHTML])).toEqual(["P", "p-body", "cd"]);
+  expect(await page.locator("article.absatz-doc > :not(h1,h2,h3,p,blockquote,nav,figure,div.math)").count()).toBe(0);
+});
+
 test("undo and redo restore text, blocks and caret", async ({ page }) => {
   await caret(page, 2); // end of "Abschnitt 1.1"
   await page.keyboard.type(" neu");

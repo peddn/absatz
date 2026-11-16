@@ -75,6 +75,7 @@ Lokal ein vorhandenes Chrome für Playwright nutzen: `CHROME_PATH=/usr/bin/googl
 - `selectionchange` kommt asynchron. Der `keydown`-Handler übernimmt deshalb zuerst die DOM-Auswahl; nicht entfernen, sonst landet Text nach schnellen Pfeiltasten an der falschen Stelle.
 - Tippen ändert den Textknoten an Ort und Stelle (`dom::replace_text`); nur wenn das nicht zum Modell passt, wird der Block neu gerendert. Nicht pauschal neu rendern: Chromium hängt Rechtschreib-Markierungen an die Textknoten.
 - Löschen innerhalb eines Blocks macht der Browser über die EditContext (Zeichen, Wörter, Emojis). Wir behandeln nur Löschen über Blockgrenzen.
+- Rechtschreib-Verzögerung messen: `e2e/tools/spellcheck-latency.mjs` (braucht eine Chrome-Wörterbuchdatei, deshalb nicht in der Testsuite).
 - Latenzmessung läuft nur, wenn `window.__absatzLatency` ein Array ist (Konsole/Test: `__absatzLatency = []`).
 - Während einer IME-Komposition (`composing`) die EditContext nie per `update_text` zurücksetzen.
 - Der `on_change`-Callback des Editors läuft, während der Editor geliehen ist: dort nur einplanen (`Preview::schedule`), nie auf das Dokument zugreifen.
