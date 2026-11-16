@@ -8,12 +8,21 @@
 // `Dictionaries` folder); headless Chrome cannot download one in a sandbox.
 // Not part of the test suite because the dictionary is not in the repo.
 //
-// For an app URL the tool types a 60-paragraph English document, reloads
-// (like opening a saved document), clicks into paragraph BLOCK (default 30)
-// and types misspelled words. Optional: PRE="Enter,Home" presses keys first,
-// EVAL="<js>" runs in the page first, SHOT=<png> saves a screenshot.
-// Measured 2026-11: plain 40 ms, Absatz 45–65 ms (also after Enter, style
-// change, joining paragraphs).
+// For an app URL the tool types an English document, reloads (like opening
+// a saved document), clicks into a paragraph and types misspelled words.
+//
+// Options (environment):
+//   IDLE=3000        pause after the click – this is the case that matters
+//   SCENARIO=edit    edit a marked word, then finish it with a space
+//   SCENARIO=nospace stop typing inside the word
+//   PRE="Enter,Home" press keys first      EVAL="<js>" run in the page first
+//   PARAS=60 BLOCK=30 document size and paragraph to type in
+//   FIRST_CLICK=<n> WAIT=<ms> NORELOAD=1 SHOT=<png>
+//
+// Findings 2026-11 (decision #18): right after focusing, Absatz marks in
+// 45–65 ms like a plain field (40 ms). Once the editor has been idle for
+// about a second, marks only come from Chromium's background pass (≈1 s
+// after the last key), while a plain field stays at 30–50 ms.
 import { chromium } from "@playwright/test";
 import fs from "fs";
 const target = process.argv[2];
@@ -35,20 +44,22 @@ if (target === "plain") {
   sel = "article.absatz-doc > p >> nth=-1";
   await page.locator(sel).click();
   // Typed, not pasted, so the tool also works on builds without paste.
-  for (let i = 0; i < 60; i++) {
+  for (let i = 0; i < Number(process.env.PARAS ?? 60); i++) {
     await page.keyboard.type("Hello world this is a paragraph.");
     await page.keyboard.press("Enter");
   }
-  await page.locator("article.absatz-doc > p >> nth=59").waitFor();
+  await page.locator(`article.absatz-doc > p >> nth=${Number(process.env.PARAS ?? 60) - 1}`).waitFor();
   // Reload so the measurement starts like a user opening a saved document.
   await page.waitForTimeout(1500);
-  await page.reload();
-  await page.locator("article.absatz-doc > p >> nth=59").waitFor();
+  if (!process.env.NORELOAD) await page.reload();
+  await page.locator(`article.absatz-doc > p >> nth=${Number(process.env.PARAS ?? 60) - 1}`).waitFor();
   if (process.env.EVAL) await page.evaluate(process.env.EVAL);
   sel = `article.absatz-doc > p >> nth=${process.env.BLOCK ?? 30}`;
   await page.locator(sel).scrollIntoViewIfNeeded();
   await page.waitForTimeout(3000);
 }
+if (process.env.WAIT) await page.waitForTimeout(Number(process.env.WAIT));
+if (process.env.FIRST_CLICK) { await page.locator("article.absatz-doc > p >> nth=" + process.env.FIRST_CLICK).click(); await page.waitForTimeout(300); }
 await page.locator(sel).click();
 await page.keyboard.press("End");
 const clip = { x: 0, y: 0, width: 900, height: 500 };
@@ -62,14 +73,35 @@ async function red() {
     return n;
   }, b64);
 }
+if (process.env.IDLE) await page.waitForTimeout(Number(process.env.IDLE));
 for (const key of (process.env.PRE ?? "").split(",").filter(Boolean)) await page.keyboard.press(key);
 const results = [];
-for (const word of [" wrongg", " misstakke", " speling", " korrect", " abzurd"]) {
+const waitRed = async (base, ms) => {
+  const t0 = Date.now();
+  while (Date.now() - t0 < ms) { if ((await red()) > base + 5) return Date.now() - t0; await page.waitForTimeout(30); }
+  return null;
+};
+const fmt = (t) => (t === null ? "nie" : t + " ms");
+for (const word of [" wronggg", " misstakkke", " spelinggg", " abzurddd"]) {
   const base = await red();
-  await page.keyboard.type(word + " ", { delay: 40 });
-  const t0 = Date.now(); let t = null;
-  while (Date.now() - t0 < 6000) { if ((await red()) > base + 5) { t = Date.now() - t0; break; } await page.waitForTimeout(30); }
-  results.push(t === null ? "nie" : t + " ms");
+  if (process.env.SCENARIO === "edit") {
+    // Edit a marked word (marker disappears), then finish it with a space.
+    await page.keyboard.type(word + " ", { delay: 40 });
+    await waitRed(base, 3000);
+    await page.keyboard.press("Backspace"); await page.keyboard.press("Backspace");
+    await page.waitForTimeout(400);
+    const gone = (await red()) <= base + 5;
+    await page.keyboard.type(" ");
+    results.push((gone ? "" : "(Linie blieb) ") + fmt(await waitRed(base, 5000)));
+  } else if (process.env.SCENARIO === "nospace") {
+    // Stop typing inside the word.
+    await page.keyboard.type(word, { delay: 40 });
+    results.push(fmt(await waitRed(base, 5000)));
+    await page.keyboard.type(" ");
+  } else {
+    await page.keyboard.type(word + " ", { delay: 40 });
+    results.push(fmt(await waitRed(base, 5000)));
+  }
 }
 if (process.env.SHOT) await page.screenshot({ path: process.env.SHOT });
 console.log(target, "→", results.join(", "));

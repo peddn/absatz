@@ -67,3 +67,8 @@ Der Dokumentbereich wird von `editor/dom.rs` direkt ins DOM gerendert (Kind *i* 
 **#17 · 2026-11-16 · gilt — Erst der Durchstich, dann Feinschliff**
 Nach einer kritischen Durchsicht: Editor und Satz waren nicht verbunden, nichts wurde gespeichert, die Vorlagen-Idee war in der Oberfläche unsichtbar. Neue Reihenfolge siehe `plan.md` („Reihenfolge nach der kritischen Durchsicht“).
 Dazu im Editor: Tippen ändert Textknoten an Ort und Stelle, Löschen innerhalb eines Blocks bleibt beim Browser (Regel „Chromium nutzen statt nachbauen“). Die Schreibansicht verspricht ein ähnliches, kein identisches Aussehen wie die Seiten.
+
+**#18 · 2026-11-17 · gilt (vorläufig) — Rechtschreibprüfung: Chromiums Hintergrundprüfung, etwa 1 s verzögert**
+Gemessen mit `e2e/tools/spellcheck-latency.mjs`: Direkt nach dem Fokussieren unterstreicht Chromium in Absatz nach 45–65 ms (normales Feld: 40 ms). Sobald der Editor etwa eine Sekunde untätig war, kommen Unterstreichungen nur noch aus Chromiums Hintergrunddurchlauf, rund 1 s nach dem letzten Tastendruck (vom Maintainer mit deutschem Wörterbuch als 1–2 s bestätigt); ein normales Feld bleibt bei 30–50 ms. Ursache liegt in Chromium: Die schnelle Prüfung hängt an nativen Tipp-Befehlen, die es mit EditContext nicht gibt.
+Ohne Wirkung getestet: `contenteditable` (auch `plaintext-only`), Auswahl neu setzen, `spellcheck` umschalten, CSS, Rolle, Sprache.
+*Entscheidung:* vorerst hinnehmen – die Markierungen sind korrekt und stabil, nur spät. Alternativen wären eine eigene Prüfung (Wörterbücher, Vorschlagsmenü; widerspricht „Chromium nutzen statt nachbauen“) oder Eingabe über `contenteditable` (Browser ändert dann das DOM; großer Umbau). Neu bewerten vor 1.0 oder wenn Chromium das Verhalten ändert.
