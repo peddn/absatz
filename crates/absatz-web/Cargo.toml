@@ -11,9 +11,24 @@ publish.workspace = true
 absatz-core.workspace = true
 leptos.workspace = true
 wasm-bindgen.workspace = true
+js-sys.workspace = true
 web-sys = { workspace = true, features = [
+    "Document",
+    "DomRect",
+    "Element",
+    "Event",
+    "EventTarget",
+    "HtmlCollection",
+    "HtmlElement",
+    "KeyboardEvent",
     "Location",
     "MessageEvent",
+    "Node",
+    "NodeList",
+    "Performance",
+    "Range",
+    "Selection",
+    "Text",
     "UrlSearchParams",
     "Window",
     "Worker",

@@ -35,6 +35,7 @@ version = "0.1.0"
 dependencies = [
  "absatz-core",
  "console_error_panic_hook",
+ "js-sys",
  "leptos",
  "wasm-bindgen",
  "web-sys",

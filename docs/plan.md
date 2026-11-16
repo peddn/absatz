@@ -1,7 +1,7 @@
 # Absatz – Projektplan
 
 Leitfaden für die Umsetzung. Lebendes Dokument: Änderungen per PR, Entscheidungen zusätzlich in [`decisions.md`](decisions.md).
-Stand: 16.11.2026 · Aktueller Meilenstein: **M0 abgeschlossen → M1**
+Stand: 16.11.2026 · Aktueller Meilenstein: **M1 – Spike abgeschlossen, weiter mit Loro (M1.2)**
 
 ---
 
@@ -63,7 +63,7 @@ Gemessen in M0 auf einer 2-Kern-VM (eher langsam) – Details: [`benchmarks/2026
 
 | Messgröße | Budget | M0 gemessen (Chromium) | Folge |
 |---|---|---|---|
-| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | – (M1) | Hauptthread wartet nie auf Typst |
+| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | 1,4 ms p50 / 2,1 ms p95 (M1-Spike) | Hauptthread wartet nie auf Typst |
 | Tastendruck → Seitenvorschau aktuell | **≤ 250 ms** | Satz 72 ms + SVG 26 ms | Entprellen ~100 ms, nur sichtbare Seiten rendern |
 | Vorlagenänderung → Schreibansicht | **≤ 50 ms** | – (M1, nur CSS) | sofort sichtbar |
 | Vorlagenänderung → Seitenvorschau | **≤ 2 s** | 1,5–1,7 s (200 S.: 3,3 s) | Hinweis „wird aktualisiert“, alte Seiten bleiben stehen |
@@ -127,7 +127,7 @@ Neue Crates nur, wenn eine dieser Regeln sonst bricht (z. B. ein eigener Pandoc-
 - **EditContext** am Dokument-Container: `textupdate` → Operation aufs Modell → gezieltes DOM-Update. Native Auswahl über die Selection-API; Zuordnung DOM ↔ (Block, Offset) über `data-block`.
 - Befehle selbst: Enter (Block teilen, Folgevorlage), Rückschritt (Blöcke verbinden), Tab (Listenebene), Vorlagenwechsel per Tastenkürzel (Strg+Alt+1–3 Überschriften, Strg+Alt+0 Textkörper, Strg+B/I für Stark/Betont), Rückgängig.
 - `content-visibility: auto` für Blöcke außerhalb des Sichtbereichs – große Dokumente ohne eigene Virtualisierung.
-- **Zu prüfen im M1-Spike:** Bleibt die Rechtschreibprüfung des Browsers mit EditContext auf DOM-Elementen aktiv? Ist Leptos' feingranulares Rendering pro Tastendruck schnell genug, oder braucht der Dokumentbereich direkte DOM-Updates? Ergebnis → `decisions.md`.
+- **Spike entschieden (#15):** Der Dokumentbereich wird direkt gerendert (`editor/dom.rs`), nicht mit Leptos. Die EditContext spiegelt nur den fokussierten Block. Offen: Rechtschreibprüfung manuell im echten Chrome bestätigen.
 
 ### 5.5 Seitenvorschau (M2)
 
@@ -169,8 +169,8 @@ Jeder Meilenstein endet mit grüner CI, aktualisiertem Plan und Tag `v0.<n>.0`.
 
 | | Ziel | Fertig, wenn … | Status |
 |---|---|---|---|
-| **M0** Gerüst | Repo, Werkzeuge, CI, Benchmark, Plan | Native und Browser-Tests grün; Benchmark nativ + Chromium dokumentiert; Pages-Deploy | ✅ fertig (lokal; Push folgt mit Repo) |
-| **M1** Schreibkern | Tippen, Absätze, Vorlagen wechseln, Rückgängig | Spike entschieden (5.4); Tippen/Enter/Rückschritt/Auswahl/IME/Einfügen (Klartext) funktionieren; Loro-Dokument mit Undo; ≤ 16 ms pro Taste bei 100 Seiten; e2e-Tests inkl. IME über CDP | offen |
+| **M0** Gerüst | Repo, Werkzeuge, CI, Benchmark, Plan | Native und Browser-Tests grün; Benchmark nativ + Chromium dokumentiert; Pages-Deploy | ✅ fertig |
+| **M1** Schreibkern | Tippen, Absätze, Vorlagen wechseln, Rückgängig | Spike entschieden (5.4); Tippen/Enter/Rückschritt/Auswahl/IME/Einfügen (Klartext) funktionieren; Loro-Dokument mit Undo; ≤ 16 ms pro Taste bei 100 Seiten; e2e-Tests inkl. IME über CDP | 🔄 Spike ✅, Loro als Nächstes |
 | **M2** Seiten | Live-Vorschau und PDF | Vorschau nur sichtbarer Seiten, entprellt, Cache; Klick-Sprung in beide Richtungen; PDF-Download; Budgets 4 eingehalten; Worker ≤ 12 MB gzip | offen |
 | **M3** Inhalte & Vorlagensätze | Alles aus 3. „Version 1.0“ außer Dateien/Austausch | Listen mit Ebenen, Fußnoten, Abbildungen, Tabellen, Formeln, Verzeichnis; 3 Vorlagensätze; Vorlagenwahl mit `appearance: base-select`; Schriften-Pipeline; axe ohne Fehler | offen |
 | **M4** Dateien & App | Speichern wie eine echte App | `.absatz`-Format, Autosave (OPFS), Öffnen/Speichern, Dateizuordnung, installierbar, offline; Versionsliste | offen |
@@ -181,7 +181,7 @@ Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (Loro-Sync über
 
 ### M1 im Detail (nächster Schritt)
 
-1. **Spike (klein, wegwerfbar erlaubt):** EditContext auf einer Leptos-gerenderten Absatzliste. Messen: Tastendruck → DOM bei 100 Seiten. Prüfen: Rechtschreibprüfung, IME (CDP `Input.imeSetComposition`), native Auswahl über Absatzgrenzen. Ergebnis als Entscheidung #15.
+1. ✅ **Spike:** EditContext + direkter DOM-Renderer, Editieroperationen in `core::edit`, e2e-Tests für Tippen, Pfeiltasten, Enter, Rückschritt, Auswahl über Blöcke, Vorlagenkürzel, IME, Latenz bei 100 Seiten. Entscheidung #15. Offen: Rechtschreibprüfung manuell bestätigen.
 2. Loro einbinden (#12): Blockliste + Text mit Zeichenvorlagen-Markierungen; Abbildung auf `model::Document`; Undo-Manager.
 3. Befehle: Enter, Rückschritt, Löschen über Absatzgrenzen, Vorlagenwechsel, Zeichenvorlage umschalten.
 4. Zwischenablage: Kopieren als Klartext + HTML (aus Rollen); Einfügen als Klartext.

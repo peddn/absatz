@@ -35,6 +35,9 @@ body {
 
 .absatz-doc {
   background: white;
+  outline: none;
+  cursor: text;
+  white-space: pre-wrap;
   padding: 3rem 3.5rem;
   border: 1px solid var(--line);
   /* Skip layout and paint for blocks far outside the viewport. */
@@ -45,3 +48,9 @@ body {
   font-size: 0.9rem;
   & pre { white-space: pre-wrap; font-size: 0.8rem; background: white; padding: 0.8rem; border: 1px solid var(--line); }
 }
+
+/* Writing view details */
+.absatz-doc .fn { color: #1f4e79; cursor: help; }
+.absatz-doc .atomic { user-select: none; color: #6b6a64; border-left: 3px solid var(--line); padding-left: 0.6rem; }
+.absatz-doc h1, .absatz-doc h2, .absatz-doc h3 { line-height: 1.25; }
+::highlight(ime) { text-decoration: underline 2px dotted; }
