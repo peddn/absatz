@@ -1,0 +1,39 @@
+name: Benchmark
+
+# Manually or weekly. Results go to the job summary; they do not gate merges
+# because shared runners are too noisy for hard thresholds.
+on:
+  workflow_dispatch:
+    inputs:
+      chapters:
+        description: "Kapitel (≈10 Seiten je Kapitel)"
+        default: "10"
+  schedule:
+    - cron: "17 3 * * 1"
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    env:
+      CHAPTERS: ${{ inputs.chapters || '10' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - run: scripts/setup.sh
+      - name: Nativ
+        run: |
+          echo '### Nativ' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          just bench "$CHAPTERS" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Chromium (Wasm im Worker)
+        run: |
+          echo '### Chromium' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          just bench-web "$CHAPTERS" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"

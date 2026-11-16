@@ -1,0 +1,47 @@
+/* App chrome only. Document formatting comes from the style set (StyleSet::to_css). */
+:root {
+  color-scheme: light;
+  --chrome-bg: #f5f4f0;
+  --chrome-fg: #2a2a28;
+  --line: #d9d6cc;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  color: var(--chrome-fg);
+  background: var(--chrome-bg);
+}
+
+.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.6rem 1.2rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 { font-size: 1.1rem; margin: 0; }
+.topbar span { color: #6b6a64; font-size: 0.85rem; }
+
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 46rem) minmax(18rem, 1fr);
+  gap: 1.5rem;
+  padding: 1.5rem;
+}
+
+.absatz-doc {
+  background: white;
+  padding: 3rem 3.5rem;
+  border: 1px solid var(--line);
+  /* Skip layout and paint for blocks far outside the viewport. */
+  & > * { content-visibility: auto; contain-intrinsic-size: auto 3em; }
+}
+
+.panel {
+  font-size: 0.9rem;
+  & pre { white-space: pre-wrap; font-size: 0.8rem; background: white; padding: 0.8rem; border: 1px solid var(--line); }
+}

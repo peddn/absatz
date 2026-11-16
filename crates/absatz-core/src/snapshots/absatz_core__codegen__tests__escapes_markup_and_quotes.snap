@@ -1,0 +1,8 @@
+---
+source: crates/absatz-core/src/codegen.rs
+expression: typst(&doc).source
+---
+#import "template.typ": apply, blk, cs
+#show: apply
+
+#blk("body")[#"#set \"quoted\" \\ *not bold* $x$ "#cs("emphasis")[#"betont"]#footnote[#"Fußnote"]]

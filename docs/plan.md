@@ -1,0 +1,218 @@
+# Absatz – Projektplan
+
+Leitfaden für die Umsetzung. Lebendes Dokument: Änderungen per PR, Entscheidungen zusätzlich in [`decisions.md`](decisions.md).
+Stand: 16.11.2026 · Aktueller Meilenstein: **M0 abgeschlossen → M1**
+
+---
+
+## 1. Vision
+
+Absatz denkt Textverarbeitung neu: Man schreibt Inhalt mit Struktur, das Aussehen kommt aus Vorlagen, die Seiten setzt ein echtes Satzsystem.
+Die Anwendung läuft vollständig im Browser, ist in Rust geschrieben und **richtig schnell** – gemessen an festen Budgets (Abschnitt 4), nicht am Gefühl.
+
+Drei Grundsätze:
+
+1. **Nur Vorlagen.** Jeder Absatz hat eine Absatzvorlage, hervorgehobener Text eine Zeichenvorlage. Es gibt keine Direktformatierung.
+2. **Seitenlos schreiben, Seiten als Ergebnis.** Die Schreibansicht ist eine fließende Spalte. Seiten entstehen in einer Live-Vorschau und im PDF.
+3. **Der Browser ist die Plattform.** Was Chromium kann, bauen wir nicht nach.
+
+## 2. Leitprinzipien für jede Entscheidung
+
+| Prinzip | Bedeutet konkret |
+|---|---|
+| KISS | Die einfachste Lösung, die die Budgets einhält. Keine Abstraktion auf Vorrat. |
+| Eine Quelle je Information | Tokens → CSS + Typst. Modell → Codegen. Protokoll, Beispieldokumente: einmal, in `absatz-core`. |
+| Browser nutzen statt nachbauen | Layout, Auswahl, Rechtschreibung, Suche, Barrierefreiheit der Schreibansicht macht Chromium. |
+| Semantik vor Aussehen | Jede Vorlage hat eine Rolle. Daraus folgen HTML-Elemente, PDF-Tags und Export. |
+| Messen statt vermuten | Leistungsfragen werden mit `just bench` / `just bench-web` entschieden. |
+
+## 3. Umfang
+
+### Version 1.0
+
+- **Absatzvorlagen:** Textkörper, Überschrift 1–3, Aufzählung und nummerierte Liste (mit Ebenen), Zitat, Hinweis, Code.
+- **Zeichenvorlagen:** Betont, Stark, Code, Verweis (Link).
+- **Inhalte:** Fußnoten, Abbildungen mit Beschriftung, Tabellen (Tabellenvorlagen), Formeln (Typst-Mathe), Inhaltsverzeichnis.
+- **Vorlagensätze:** 3–4 gestaltete Sätze (Standard, Brief, Bericht, Abschlussarbeit) mit wenigen Stellschrauben (Grundschrift, Grundgröße, Akzentfarbe). Kein freier Vorlageneditor in 1.0.
+- **Seiten:** Live-Vorschau, PDF-Export (getaggt; optional PDF/UA-1).
+- **Dateien:** eigenes Format `.absatz`, automatisches Speichern, Versionen; Import/Export DOCX, ODT, Markdown.
+- **App:** installierbar (PWA), offline nutzbar, öffnet `.absatz`-Dateien aus dem Dateimanager.
+
+### Bewusst nicht (Streichliste)
+
+| Nicht in 1.0 | Stattdessen |
+|---|---|
+| Direktformatierung (Schrift, Größe, Farbe am Text) | Vorlagen |
+| Freie Bildposition, Textumfluss | Abbildung mit Beschriftung, automatisch platziert |
+| Änderungsverfolgung im Word-Stil | Versionsvergleich und Kommentare (nach 1.0) |
+| Zellformatierung in Tabellen | Tabellenvorlagen |
+| Freie Kopf-/Fußzeilen | Teil des Vorlagensatzes |
+| Seriendruck, Makros, Zeichenwerkzeuge | – |
+| Eigene Druckfunktion | PDF |
+| Firefox, Safari | – (Entscheidung #2) |
+| Server/Backend | Alles lokal; Zusammenarbeit nach 1.0 |
+
+### Technisch ausgeschlossen
+
+Eigene Satz-Engine · Canvas-Rendering der Schreibansicht · eigene Rechtschreibprüfung · Wasm-Threads/`SharedArrayBuffer` · Typst im Hauptthread.
+
+## 4. Leistungsbudgets
+
+Referenz: 100-seitiges Dokument (`core::sample::document(10)`), Chromium, durchschnittlicher Laptop.
+Gemessen in M0 auf einer 2-Kern-VM (eher langsam) – Details: [`benchmarks/2026-11-typst.md`](benchmarks/2026-11-typst.md).
+
+| Messgröße | Budget | M0 gemessen (Chromium) | Folge |
+|---|---|---|---|
+| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | – (M1) | Hauptthread wartet nie auf Typst |
+| Tastendruck → Seitenvorschau aktuell | **≤ 250 ms** | Satz 72 ms + SVG 26 ms | Entprellen ~100 ms, nur sichtbare Seiten rendern |
+| Vorlagenänderung → Schreibansicht | **≤ 50 ms** | – (M1, nur CSS) | sofort sichtbar |
+| Vorlagenänderung → Seitenvorschau | **≤ 2 s** | 1,5–1,7 s (200 S.: 3,3 s) | Hinweis „wird aktualisiert“, alte Seiten bleiben stehen |
+| Erstes Öffnen: App bedienbar | **≤ 1 s** | Haupt-Wasm 113 KB gzip | Worker lädt im Hintergrund |
+| Erstes Öffnen: Vorschau da (100 S.) | **≤ 4 s** | Satz 2,5 s + Laden Worker | Worker verkleinern (M2), Cache per Service Worker (M4) |
+| PDF-Export (100 S.) | **≤ 1 s** | 0,6 s | – |
+| Speicher Worker (100 S.) | **≤ 500 MB** | 292 MB (200 S.: 554 MB) | `comemo::evict(1)`, unveränderte Eingaben überspringen |
+| Haupt-Wasm | **≤ 400 KB gzip** | 113 KB | Typst nie im Hauptthread |
+| Worker-Wasm | **≤ 8 MB gzip** | 16,5 MB (inkl. 9,6 MB Schriften roh) | Schriften auslagern, Größe optimieren (M2/M3) |
+
+Wichtigste Erkenntnisse aus M0:
+
+- Typst setzt nach einer Textänderung inkrementell neu (72 ms für 100 Seiten im Browser, linear wachsend) – für die Vorschau gut, für Tipp-Latenz zu langsam. **Das bestätigt die seitenlose Schreibansicht.**
+- **Jede Vorlagenänderung lässt Typst das ganze Dokument neu setzen** (Show-/Set-Regeln stecken in jeder Stilkette). Deshalb zeigt die Schreibansicht die Änderung sofort per CSS; die Vorschau folgt.
+- Der Satz-Cache dominiert den Speicher. `evict(1)` statt `evict(10)` senkt ihn im Browser von 947 auf 292 MB ohne messbaren Zeitverlust – aber nur, wenn unveränderte Eingaben gar nicht erst gesetzt werden (sonst 1,7 s Ausreißer).
+- Sehr lange Dokumente (200+ Seiten) reißen die Vorlagen-Budgets. Für 1.0 akzeptiert; danach prüfen: Vorschau kapitelweise setzen.
+
+## 5. Architektur
+
+```
+ Hauptthread (absatz-web, klein)                    Worker (absatz-typeset, groß)
+ ┌──────────────────────────────────────┐           ┌───────────────────────────────┐
+ │ Leptos-Oberfläche                    │           │ Typst-World im Speicher        │
+ │ Schreibansicht: semantisches DOM     │  Quelltext│  main.typ   ← Codegen          │
+ │   + EditContext (Eingabe/IME)        │ ────────► │  template.typ ← Vorlagensatz   │
+ │   + CSS aus Vorlagen-Tokens          │  Tokens   │  styles.json  ← Tokens         │
+ │ Dokument: Loro (M1)                  │ ────────► │ compile → Seiten               │
+ │ codegen::typst (absatz-core)         │ ◄──────── │ SVG je sichtbarer Seite, PDF   │
+ │ Seitenvorschau (SVG-Bilder)          │  Seiten   │                                │
+ └──────────────────────────────────────┘           └───────────────────────────────┘
+          ▲ beide nutzen absatz-core: Modell · Vorlagen · Codegen · Protokoll · Beispiele
+```
+
+### 5.1 Crates und Abhängigkeitsregeln
+
+| Crate | Inhalt | Abhängigkeiten |
+|---|---|---|
+| `absatz-core` | `model`, `styles` (+ `stylesets/`), `codegen`, `protocol`, `sample` | nur serde – schnell gebaut, nativ testbar |
+| `absatz-typeset` | `Typesetter` (World, compile, SVG, Raster, PDF), `bench`, `bin/worker.rs` | core, Typst |
+| `absatz-web` | Leptos-App, Schreibansicht, Worker-Anbindung | core – **nie** typeset |
+
+Neue Crates nur, wenn eine dieser Regeln sonst bricht (z. B. ein eigener Pandoc-Worker in M5).
+
+### 5.2 Wer besitzt was
+
+- **Hauptthread besitzt das Dokument.** Er wendet Eingaben an, aktualisiert das DOM synchron und erzeugt den Typst-Quelltext (`codegen::typst`, 3 ms für 100 Seiten).
+- **Der Worker ist eine Funktion „Quelltext + Tokens → Seiten“.** Er hält nur die Typst-World. Kein Dokumentmodell, kein Loro im Worker.
+- Protokoll (`core::protocol`): JSON-Nachrichten. Zuerst immer den ganzen Quelltext senden (Typst diffed selbst, `Source::replace`). Erst wenn gemessen nötig: nur geänderte Blöcke (`Generated::block_ranges` existiert dafür).
+
+### 5.3 Vorlagensystem
+
+- Vorlagensatz = `stylesets/<id>/tokens.json` + `template.typ`.
+- `tokens.json` ist die **einzige** Quelle für Werte. Typst liest sie als `styles.json`; `StyleSet::to_css` erzeugt das CSS der Schreibansicht.
+- Jede Absatzvorlage hat eine **Rolle** (`body`, `heading`, `list_item`, `quote`, `note`, …). Die Rolle bestimmt das Typst-Element (`blk()` im Template) und das HTML-Element in der Schreibansicht.
+- Eigenschaften bleiben bewusst wenige: Größe, Farbe, kursiv, fett, Einzug, Zeilenabstand, Absatzabstand, Blocksatz (+ später Nummerierung). Was beide Ausgaben nicht gleich können, kommt nicht hinein.
+- Das Dokument speichert den verwendeten Vorlagensatz vollständig (Tokens + Template), damit es auch mit künftigen App-Versionen gleich aussieht.
+
+### 5.4 Schreibansicht (M1)
+
+- Jeder Block ist ein semantisches Element (`h1`–`h3`, `p`, `blockquote`, Listen) mit `data-block="<id>"` und Klasse `p-<vorlage>`; Zeichenvorlagen als `span.c-<vorlage>`.
+- **EditContext** am Dokument-Container: `textupdate` → Operation aufs Modell → gezieltes DOM-Update. Native Auswahl über die Selection-API; Zuordnung DOM ↔ (Block, Offset) über `data-block`.
+- Befehle selbst: Enter (Block teilen, Folgevorlage), Rückschritt (Blöcke verbinden), Tab (Listenebene), Vorlagenwechsel per Tastenkürzel (Strg+Alt+1–3 Überschriften, Strg+Alt+0 Textkörper, Strg+B/I für Stark/Betont), Rückgängig.
+- `content-visibility: auto` für Blöcke außerhalb des Sichtbereichs – große Dokumente ohne eigene Virtualisierung.
+- **Zu prüfen im M1-Spike:** Bleibt die Rechtschreibprüfung des Browsers mit EditContext auf DOM-Elementen aktiv? Ist Leptos' feingranulares Rendering pro Tastendruck schnell genug, oder braucht der Dokumentbereich direkte DOM-Updates? Ergebnis → `decisions.md`.
+
+### 5.5 Seitenvorschau (M2)
+
+- Nach Eingaben entprellt (~100 ms) Quelltext an den Worker; der Worker setzt und rendert **nur sichtbare Seiten** als SVG.
+- Seiten-Cache: Hash je Seiten-Frame; unveränderte Seiten werden nicht neu gerendert oder übertragen.
+- Während der Worker rechnet, bleiben alte Seiten sichtbar (Hinweis „wird aktualisiert“). Neue Anfragen ersetzen wartende (nie Warteschlangen aufbauen).
+- Klick in die Vorschau → Typst-Span → `block_ranges` → Block in der Schreibansicht (und umgekehrt).
+- PDF-Export: `typst-pdf`, getaggt; Speichern über File System Access.
+
+### 5.6 Dokument und Speicherung (M1, M4)
+
+- Dokument als **Loro-CRDT**: Blockliste, Text je Block mit Markierungen für Zeichenvorlagen. Liefert Undo/Redo, Versionen und das Speicherformat (Snapshot); später Zusammenarbeit.
+- `model::Document` bleibt die einfache Lesesicht für Codegen und Tests. Abbildung Loro → `Document` in `absatz-core`.
+- Invarianten: jeder Block hat eine gültige Absatzvorlage; Zeichenvorlagen überlappen nicht (höchstens eine je Zeichen); unbekannte Vorlagen-IDs fallen auf `body` zurück und werden gemeldet.
+- Datei `.absatz` = ZIP: `doc.loro`, `styleset/`, `assets/<hash>` (Bilder), `manifest.json` mit Formatversion.
+- Autosave im OPFS; Öffnen/Speichern über File System Access; File Handling API für die installierte PWA.
+
+### 5.7 Import und Export (M5)
+
+- Pandoc 3.9+ als Wasm in einem eigenen, erst bei Bedarf geladenen Worker (≈ 16 MB).
+- DOCX-Import mit `+styles`: Word-Vorlagennamen kommen als `custom-style` an → Zuordnungstabelle auf unsere Vorlagen; Rest per Rolle (Überschrift, Liste, Zitat) oder auf `body`.
+- Einfügen aus der Zwischenablage braucht kein Pandoc: kleine HTML-Zuordnung (`h1–h3`, `p`, `li`, `em`, `strong`, `blockquote`) in `absatz-core`, **dieselbe** Zuordnungstabelle wie beim Import.
+- Export DOCX/ODT/Markdown überträgt Struktur und Vorlagennamen, nicht das exakte Aussehen. Exaktes Aussehen: PDF.
+
+### 5.8 Schriften (M3)
+
+- Vorlagensätze nennen ihre Schriftdateien. Die App lädt sie einmal und nutzt dieselben Bytes zweimal: im Worker für Typst, im Hauptthread über die `FontFace`-API für die Schreibansicht. So stimmen Schreibansicht und Seiten überein.
+- Nur freie Schriften (OFL). M0 bettet übergangsweise `typst-assets` ein (9,6 MB).
+
+### 5.9 Barrierefreiheit
+
+- Schreibansicht: echte Überschriften/Listen aus den Rollen; der Editor-Container mit `role="textbox"` und `aria-multiline`.
+- PDF: getaggt (Typst-Standard), Export als PDF/UA-1 wählbar; Dokumenttitel aus den Metadaten.
+- Prüfung mit axe in den Playwright-Tests ab M3.
+
+## 6. Meilensteine
+
+Jeder Meilenstein endet mit grüner CI, aktualisiertem Plan und Tag `v0.<n>.0`.
+
+| | Ziel | Fertig, wenn … | Status |
+|---|---|---|---|
+| **M0** Gerüst | Repo, Werkzeuge, CI, Benchmark, Plan | Native und Browser-Tests grün; Benchmark nativ + Chromium dokumentiert; Pages-Deploy | ✅ fertig (lokal; Push folgt mit Repo) |
+| **M1** Schreibkern | Tippen, Absätze, Vorlagen wechseln, Rückgängig | Spike entschieden (5.4); Tippen/Enter/Rückschritt/Auswahl/IME/Einfügen (Klartext) funktionieren; Loro-Dokument mit Undo; ≤ 16 ms pro Taste bei 100 Seiten; e2e-Tests inkl. IME über CDP | offen |
+| **M2** Seiten | Live-Vorschau und PDF | Vorschau nur sichtbarer Seiten, entprellt, Cache; Klick-Sprung in beide Richtungen; PDF-Download; Budgets 4 eingehalten; Worker ≤ 12 MB gzip | offen |
+| **M3** Inhalte & Vorlagensätze | Alles aus 3. „Version 1.0“ außer Dateien/Austausch | Listen mit Ebenen, Fußnoten, Abbildungen, Tabellen, Formeln, Verzeichnis; 3 Vorlagensätze; Vorlagenwahl mit `appearance: base-select`; Schriften-Pipeline; axe ohne Fehler | offen |
+| **M4** Dateien & App | Speichern wie eine echte App | `.absatz`-Format, Autosave (OPFS), Öffnen/Speichern, Dateizuordnung, installierbar, offline; Versionsliste | offen |
+| **M5** Austausch | DOCX/ODT/Markdown | Import/Export über Pandoc-Worker; Einfügen von HTML normalisiert; Zuordnungstabelle geteilt | offen |
+| **M6** 1.0 | Feinschliff | Budgets auf Referenzgerät, Fehlerbehandlung, Einstieg/Hilfe, Doku | offen |
+
+Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (Loro-Sync über ein einfaches Relay), freier Vorlageneditor.
+
+### M1 im Detail (nächster Schritt)
+
+1. **Spike (klein, wegwerfbar erlaubt):** EditContext auf einer Leptos-gerenderten Absatzliste. Messen: Tastendruck → DOM bei 100 Seiten. Prüfen: Rechtschreibprüfung, IME (CDP `Input.imeSetComposition`), native Auswahl über Absatzgrenzen. Ergebnis als Entscheidung #15.
+2. Loro einbinden (#12): Blockliste + Text mit Zeichenvorlagen-Markierungen; Abbildung auf `model::Document`; Undo-Manager.
+3. Befehle: Enter, Rückschritt, Löschen über Absatzgrenzen, Vorlagenwechsel, Zeichenvorlage umschalten.
+4. Zwischenablage: Kopieren als Klartext + HTML (aus Rollen); Einfügen als Klartext.
+5. e2e-Tests für jeden Befehl; Leistungstest „100 Seiten tippen“.
+
+## 7. Teststrategie
+
+| Ebene | Werkzeug | Was |
+|---|---|---|
+| Logik | `cargo test` in `absatz-core` | Modell-Operationen, Invarianten, Zuordnungen |
+| Erzeugter Text | insta-Snapshots | Typst-Codegen, CSS, später HTML-Kopie |
+| Satz | `cargo test` in `absatz-typeset` | Dokumente kompilieren fehlerfrei, Seitenzahlen plausibel |
+| Browser | Playwright (Chromium) | Start, Tippen, IME, Auswahl, Zwischenablage, Vorschau, Dateien |
+| Leistung | `just bench`, `just bench-web` | Budgets aus Abschnitt 4; wöchentlich in CI (nicht blockierend) |
+
+Grundsatz: Für jeden behobenen Fehler zuerst ein Test, der ihn zeigt.
+
+## 8. Risiken
+
+| Risiko | Wirkung | Gegenmaßnahme |
+|---|---|---|
+| EditContext-Randfälle (Auswahl, IME, Rechtschreibung) | Kern der Bedienung | Spike zuerst (M1.1); e2e mit CDP-IME; Google Docs nutzt die API produktiv |
+| Vorlagenänderung = Neusatz von allem | Vorschau 1–2 s bei großen Dokumenten | Schreibansicht sofort per CSS; Vorschau asynchron; Größe im Blick behalten |
+| Worker-Größe (16 MB gzip) | Erster Start langsam | Schriften auslagern, `opt-level = "s"` für den Worker testen, Raster-Export entfernen falls ungenutzt, Service-Worker-Cache |
+| Speicher des Typst-Caches | Tab-Absturz bei sehr großen Dokumenten | `evict(1)`, Spitzenwert messen, Budget 500 MB |
+| Typst-Updates ändern das Template-Verhalten | Dokumente sehen anders aus | Typst-Version fest pinnen; Vorlagensatz im Dokument speichern; Snapshot-Tests der Vorlagensätze |
+| Pandoc-Größe und GPL | Ladezeit, Lizenzpflichten | Nur bei Bedarf laden; als separates Modul mit Lizenztext und Quellverweis ausliefern |
+| Loro-Datenmodell ändert sich später | Migrationen | Formatversion im Manifest; Abbildung auf `model::Document` als Schutzschicht |
+
+## 9. Offene Fragen an den Maintainer
+
+1. GitHub-Repository: Besitzer und Name (`absatz`)? Pages für die Vorschau aktivieren?
+2. Referenzgerät für die Budgets (z. B. ein bestimmtes Laptop-Modell)?
+3. Sollen eigene Vorlagen in 1.0 gar nicht (Plan) oder in einer einfachen Form (Duplizieren + Stellschrauben) möglich sein?

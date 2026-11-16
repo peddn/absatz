@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Absatz</title>
+    <base data-trunk-public-url />
+    <link data-trunk rel="css" href="app.css" />
+    <!-- Main thread: UI and writing view. Small; no Typst in here. -->
+    <link data-trunk rel="rust" href="Cargo.toml" data-type="main" data-wasm-opt="3" />
+    <!-- Worker: typesetting with Typst. Large; loaded in the background. -->
+    <link
+      data-trunk
+      rel="rust"
+      href="../absatz-typeset/Cargo.toml"
+      data-bin="worker"
+      data-type="worker"
+      data-loader-shim
+      data-bindgen-target="web"
+      data-wasm-opt="3"
+    />
+  </head>
+  <body></body>
+</html>
