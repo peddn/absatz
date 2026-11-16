@@ -1,7 +1,7 @@
 # Absatz – Projektplan
 
 Leitfaden für die Umsetzung. Lebendes Dokument: Änderungen per PR, Entscheidungen zusätzlich in [`decisions.md`](decisions.md).
-Stand: 16.11.2026 · Aktueller Meilenstein: **M1 – Spike abgeschlossen, weiter mit Loro (M1.2)**
+Stand: 16.11.2026 · Aktueller Meilenstein: **M1 – Spike und Undo fertig, als Nächstes der Durchstich (Tippen → Vorschau → PDF)**
 
 ---
 
@@ -91,7 +91,7 @@ Wichtigste Erkenntnisse aus M0:
  │ Schreibansicht: semantisches DOM     │  Quelltext│  main.typ   ← Codegen          │
  │   + EditContext (Eingabe/IME)        │ ────────► │  template.typ ← Vorlagensatz   │
  │   + CSS aus Vorlagen-Tokens          │  Tokens   │  styles.json  ← Tokens         │
- │ Dokument: Loro (M1)                  │ ────────► │ compile → Seiten               │
+ │ Dokument + Verlauf (absatz-core)     │ ────────► │ compile → Seiten               │
  │ codegen::typst (absatz-core)         │ ◄──────── │ SVG je sichtbarer Seite, PDF   │
  │ Seitenvorschau (SVG-Bilder)          │  Seiten   │                                │
  └──────────────────────────────────────┘           └───────────────────────────────┘
@@ -111,7 +111,7 @@ Neue Crates nur, wenn eine dieser Regeln sonst bricht (z. B. ein eigener Pandoc-
 ### 5.2 Wer besitzt was
 
 - **Hauptthread besitzt das Dokument.** Er wendet Eingaben an, aktualisiert das DOM synchron und erzeugt den Typst-Quelltext (`codegen::typst`, 3 ms für 100 Seiten).
-- **Der Worker ist eine Funktion „Quelltext + Tokens → Seiten“.** Er hält nur die Typst-World. Kein Dokumentmodell, kein Loro im Worker.
+- **Der Worker ist eine Funktion „Quelltext + Tokens → Seiten“.** Er hält nur die Typst-World, kein Dokumentmodell.
 - Protokoll (`core::protocol`): JSON-Nachrichten. Zuerst immer den ganzen Quelltext senden (Typst diffed selbst, `Source::replace`). Erst wenn gemessen nötig: nur geänderte Blöcke (`Generated::block_ranges` existiert dafür).
 
 ### 5.3 Vorlagensystem
@@ -140,10 +140,11 @@ Neue Crates nur, wenn eine dieser Regeln sonst bricht (z. B. ein eigener Pandoc-
 
 ### 5.6 Dokument und Speicherung (M1, M4)
 
-- Dokument als **Loro-CRDT**: Blockliste, Text je Block mit Markierungen für Zeichenvorlagen. Liefert Undo/Redo, Versionen und das Speicherformat (Snapshot); später Zusammenarbeit.
-- `model::Document` bleibt die einfache Lesesicht für Codegen und Tests. Abbildung Loro → `Document` in `absatz-core`.
+- Das Dokument ist `model::Document` im Hauptthread; Änderungen laufen über `core::edit`.
+- **Rückgängig/Wiederholen** über `core::history` (#16): Jede Änderung ersetzt einen zusammenhängenden Blockbereich; ein Schritt speichert ihn vorher und nachher. Tippen im selben Block wird bis zu einer Pause von 1 s zusammengefasst.
+- Versionen (M4) sind gespeicherte Stände des Dokuments, kein CRDT-Verlauf.
 - Invarianten: jeder Block hat eine gültige Absatzvorlage; Zeichenvorlagen überlappen nicht (höchstens eine je Zeichen); unbekannte Vorlagen-IDs fallen auf `body` zurück und werden gemeldet.
-- Datei `.absatz` = ZIP: `doc.loro`, `styleset/`, `assets/<hash>` (Bilder), `manifest.json` mit Formatversion.
+- Datei `.absatz` = ZIP: `document.json` (Modell), `styleset/`, `assets/<hash>` (Bilder), `manifest.json` mit Formatversion.
 - Autosave im OPFS; Öffnen/Speichern über File System Access; File Handling API für die installierte PWA.
 
 ### 5.7 Import und Export (M5)
@@ -171,20 +172,32 @@ Jeder Meilenstein endet mit grüner CI, aktualisiertem Plan und Tag `v0.<n>.0`.
 | | Ziel | Fertig, wenn … | Status |
 |---|---|---|---|
 | **M0** Gerüst | Repo, Werkzeuge, CI, Benchmark, Plan | Native und Browser-Tests grün; Benchmark nativ + Chromium dokumentiert; Pages-Deploy | ✅ fertig |
-| **M1** Schreibkern | Tippen, Absätze, Vorlagen wechseln, Rückgängig | Spike entschieden (5.4); Tippen/Enter/Rückschritt/Auswahl/IME/Einfügen (Klartext) funktionieren; Loro-Dokument mit Undo; ≤ 16 ms pro Taste bei 100 Seiten; e2e-Tests inkl. IME über CDP | 🔄 Spike ✅, Loro als Nächstes |
+| **M1** Schreibkern | Tippen, Absätze, Vorlagen wechseln, Rückgängig | Spike entschieden (5.4); Tippen/Enter/Rückschritt/Auswahl/IME/Einfügen (Klartext) funktionieren; Rückgängig/Wiederholen; ≤ 16 ms pro Taste bei 100 Seiten; e2e-Tests inkl. IME über CDP | 🔄 Spike ✅, Undo ✅ |
 | **M2** Seiten | Live-Vorschau und PDF | Vorschau nur sichtbarer Seiten, entprellt, Cache; Klick-Sprung in beide Richtungen; PDF-Download; Budgets 4 eingehalten; Worker ≤ 12 MB gzip | offen |
 | **M3** Inhalte & Vorlagensätze | Alles aus 3. „Version 1.0“ außer Dateien/Austausch | Listen mit Ebenen, Fußnoten, Abbildungen, Tabellen, Formeln, Verzeichnis; 3 Vorlagensätze; Vorlagenwahl mit `appearance: base-select`; Schriften-Pipeline; axe ohne Fehler | offen |
 | **M4** Dateien & App | Speichern wie eine echte App | `.absatz`-Format, Autosave (OPFS), Öffnen/Speichern, Dateizuordnung, installierbar, offline; Versionsliste | offen |
 | **M5** Austausch | DOCX/ODT/Markdown | Import/Export über Pandoc-Worker; Einfügen von HTML normalisiert; Zuordnungstabelle geteilt | offen |
 | **M6** 1.0 | Feinschliff | Budgets auf Referenzgerät, Fehlerbehandlung, Einstieg/Hilfe, Doku | offen |
 
-Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (Loro-Sync über ein einfaches Relay), freier Vorlageneditor.
+Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (CRDT wie Loro, nur dann nachgeladen – siehe #16), freier Vorlageneditor.
 
-### M1 im Detail (nächster Schritt)
+### Reihenfolge nach der kritischen Durchsicht (#17)
+
+Die Meilensteine bleiben als Themen bestehen, die Reihenfolge der nächsten Schritte ändert sich:
+
+1. ✅ Tippen ändert nur den Textknoten; Löschen im Block macht der Browser (klärt die Rechtschreibprüfung – manuelle Bestätigung offen).
+2. **Durchstich:** Tippen → Live-Vorschau → PDF, Fehler je Block abfangen (kaputte Formel, unbekannte Vorlage), automatisches Speichern (OPFS).
+3. **Sichtbare Vorlagenauswahl** (aktuelle Vorlage anzeigen und wählen), Einfügen und Ausschneiden.
+4. Worker-Größe messen (Typst ohne Schriften), Budget danach festlegen; Vorratscode entfernen (Raster-Export, Benchmark-Knopf in der App).
+5. Danach: Zeichenvorlagen, weitere Inhalte.
+
+Bekannte Abweichungen Schreibansicht ↔ Seiten (bewusst „ähnlich“, nicht „gleich“): Dokumentschrift wird in der Schreibansicht noch nicht geladen, Überschriften-Nummern fehlen dort, Zeilenabstand nur angenähert.
+
+### M1 im Detail
 
 1. ✅ **Spike:** EditContext + direkter DOM-Renderer, Editieroperationen in `core::edit`, e2e-Tests für Tippen, Pfeiltasten, Enter, Rückschritt, Auswahl über Blöcke, Vorlagenkürzel, IME, Latenz bei 100 Seiten. Entscheidung #15. Offen: Rechtschreibprüfung manuell bestätigen.
-2. Loro einbinden (#12): Blockliste + Text mit Zeichenvorlagen-Markierungen; Abbildung auf `model::Document`; Undo-Manager.
-3. Befehle: Enter, Rückschritt, Löschen über Absatzgrenzen, Vorlagenwechsel, Zeichenvorlage umschalten.
+2. ✅ **Rückgängig/Wiederholen** im Kern (`core::history`, Strg+Z, Strg+Umschalt+Z, Strg+Y). Loro verworfen (#16).
+3. Befehle: ✅ Enter, Rückschritt, Löschen über Absatzgrenzen, Vorlagenwechsel; offen: Zeichenvorlage umschalten (Strg+B/I).
 4. Zwischenablage: Kopieren als Klartext + HTML (aus Rollen); Einfügen als Klartext.
 5. e2e-Tests für jeden Befehl; Leistungstest „100 Seiten tippen“.
 
@@ -210,7 +223,7 @@ Grundsatz: Für jeden behobenen Fehler zuerst ein Test, der ihn zeigt.
 | Speicher des Typst-Caches | Tab-Absturz bei sehr großen Dokumenten | `evict(1)`, Spitzenwert messen, Budget 500 MB |
 | Typst-Updates ändern das Template-Verhalten | Dokumente sehen anders aus | Typst-Version fest pinnen; Vorlagensatz im Dokument speichern; Snapshot-Tests der Vorlagensätze |
 | Pandoc-Größe und GPL | Ladezeit, Lizenzpflichten | Nur bei Bedarf laden; als separates Modul mit Lizenztext und Quellverweis ausliefern |
-| Loro-Datenmodell ändert sich später | Migrationen | Formatversion im Manifest; Abbildung auf `model::Document` als Schutzschicht |
+| Zusammenarbeit braucht später ein CRDT | Umbau der Speicherung | Alle Änderungen laufen schon über wenige Operationen in `core::edit` – die lassen sich auf ein CRDT abbilden; CRDT-Bibliothek dann nur beim gemeinsamen Bearbeiten nachladen |
 
 ## 9. Offene Fragen an den Maintainer
 

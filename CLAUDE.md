@@ -73,6 +73,9 @@ Lokal ein vorhandenes Chrome für Playwright nutzen: `CHROME_PATH=/usr/bin/googl
 - Worker-Nachrichten erst nach `FromWorker::Ready` senden – vorher gehen sie verloren.
 - Positionen zählen UTF-16-Einheiten (`core::edit::Pos`), eine Fußnote zählt als 1. DOM-Struktur eines Blocks kennt nur `editor/dom.rs`.
 - `selectionchange` kommt asynchron. Der `keydown`-Handler übernimmt deshalb zuerst die DOM-Auswahl; nicht entfernen, sonst landet Text nach schnellen Pfeiltasten an der falschen Stelle.
+- Tippen ändert den Textknoten an Ort und Stelle (`dom::replace_text`); nur wenn das nicht zum Modell passt, wird der Block neu gerendert. Nicht pauschal neu rendern: Chromium hängt Rechtschreib-Markierungen an die Textknoten.
+- Löschen innerhalb eines Blocks macht der Browser über die EditContext (Zeichen, Wörter, Emojis). Wir behandeln nur Löschen über Blockgrenzen.
+- Latenzmessung läuft nur, wenn `window.__absatzLatency` ein Array ist (Konsole/Test: `__absatzLatency = []`).
 - Während einer IME-Komposition (`composing`) die EditContext nie per `update_text` zurücksetzen.
 - `web-sys` braucht für jede Web-API ein Feature in `Cargo.toml`.
 - Release-Builds (LTO) dauern lange; zum Iterieren `just dev` (Dev-Profil mit optimierten Abhängigkeiten).

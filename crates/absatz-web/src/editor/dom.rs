@@ -9,7 +9,7 @@ use absatz_core::edit::{Pos, utf16_len};
 use absatz_core::model::{Block, BlockContent, Document as Doc, Inline};
 use absatz_core::styles::{Role, StyleSet};
 use wasm_bindgen::JsCast;
-use web_sys::{Document, Element, Node};
+use web_sys::{CharacterData, Document, Element, Node};
 
 pub fn render_block(dom: &Document, block: &Block, styles: &StyleSet) -> Element {
     let el = |tag: &str| dom.create_element(tag).expect("valid tag");
@@ -213,4 +213,31 @@ pub fn range(root: &Element, from: Pos, to: Pos) -> Option<web_sys::Range> {
     r.set_start(&sn, so).ok()?;
     r.set_end(&en, eo).ok()?;
     Some(r)
+}
+
+/// Replace positions `from..to` of a block by editing one text node in place.
+/// Keeping the node keeps what the browser attached to it (spellcheck markers).
+/// Returns false when the edit is not a plain in-node change that matches the
+/// model; the caller then re-renders the block.
+pub fn replace_text(root: &Element, block: usize, from: usize, to: usize, text: &str) -> bool {
+    let (Some((start, so)), Some((end, eo))) = (
+        dom_point(root, Pos::new(block, from)),
+        dom_point(root, Pos::new(block, to)),
+    ) else {
+        return false;
+    };
+    let Some(data) = start.dyn_ref::<CharacterData>() else {
+        return false;
+    };
+    if start != end || eo < so {
+        return false;
+    }
+    // At the very start of a styled run the model inserts unstyled text.
+    let styled = start.parent_node().is_some_and(|p| p.node_name() == "SPAN");
+    // An emptied run disappears from the model (and an empty block needs <br>).
+    let new_len = data.length() - (eo - so) + utf16_len(text) as u32;
+    if (so == 0 && styled) || new_len == 0 {
+        return false;
+    }
+    data.replace_data(so, eo - so, text).is_ok()
 }
