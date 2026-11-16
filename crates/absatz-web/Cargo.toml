@@ -12,7 +12,10 @@ absatz-core.workspace = true
 leptos.workspace = true
 wasm-bindgen.workspace = true
 js-sys.workspace = true
+wasm-bindgen-futures.workspace = true
 web-sys = { workspace = true, features = [
+    "Blob",
+    "BlobPropertyBag",
     "CharacterData",
     "Document",
     "DomRect",
@@ -30,6 +33,7 @@ web-sys = { workspace = true, features = [
     "Range",
     "Selection",
     "Text",
+    "Url",
     "UrlSearchParams",
     "Window",
     "Worker",

@@ -178,3 +178,43 @@ pub fn document(chapters: usize) -> Sample {
         early_block,
     }
 }
+
+/// The document a new user sees first.
+pub fn welcome() -> Document {
+    let b = |style: &str, text: &str| Block::para(style, text);
+    Document {
+        blocks: vec![
+            b("h1", "Willkommen bei Absatz"),
+            b(
+                "body",
+                "Hier schreibst du in einer fließenden Spalte. Rechts siehst du dieselben Inhalte als gesetzte Seiten – so, wie sie im PDF erscheinen.",
+            ),
+            b("h2", "Vorlagen statt Formatierung"),
+            Block::text(
+                "body",
+                vec![
+                    Inline::plain(
+                        "Du legst nicht fest, wie Text aussieht, sondern was er ist: Überschrift, Textkörper, Zitat. Das Aussehen kommt aus dem Vorlagensatz und ist ",
+                    ),
+                    Inline::styled("überall einheitlich", "emphasis"),
+                    Inline::plain("."),
+                ],
+            ),
+            b(
+                "list",
+                "Strg+Alt+1, 2 oder 3 macht aus dem Absatz eine Überschrift.",
+            ),
+            b("list", "Strg+Alt+0 macht ihn wieder zum Textkörper."),
+            b("list", "Strg+Z nimmt den letzten Schritt zurück."),
+            b("h2", "Seiten und PDF"),
+            b(
+                "body",
+                "Seitenumbruch, Silbentrennung, Kopfzeile und Seitenzahlen entstehen automatisch. Über „PDF“ lädst du das fertige Dokument herunter. Deine Änderungen werden in diesem Browser automatisch gespeichert.",
+            ),
+            b(
+                "quote",
+                "Schreib einfach los – dieses Dokument darfst du überschreiben.",
+            ),
+        ],
+    }
+}

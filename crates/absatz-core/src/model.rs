@@ -70,3 +70,52 @@ impl Block {
         Self::text(style, vec![Inline::plain(text)])
     }
 }
+
+/// Stored form of a document (autosave now, `document.json` in the file later).
+#[derive(Serialize, Deserialize)]
+struct Stored {
+    version: u32,
+    document: Document,
+}
+
+const FORMAT_VERSION: u32 = 1;
+
+impl Document {
+    /// A new document: one empty body paragraph.
+    pub fn empty() -> Self {
+        Document {
+            blocks: vec![Block::text("body", Vec::new())],
+        }
+    }
+
+    pub fn to_stored_json(&self) -> String {
+        let stored = Stored {
+            version: FORMAT_VERSION,
+            document: self.clone(),
+        };
+        serde_json::to_string(&stored).expect("document serializes")
+    }
+
+    /// `None` for unreadable data or a format from a newer version.
+    pub fn from_stored_json(json: &str) -> Option<Self> {
+        let stored: Stored = serde_json::from_str(json).ok()?;
+        (stored.version <= FORMAT_VERSION && !stored.document.blocks.is_empty())
+            .then_some(stored.document)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stored_json_roundtrip_and_rejects_garbage() {
+        let doc = crate::sample::welcome();
+        assert_eq!(Document::from_stored_json(&doc.to_stored_json()), Some(doc));
+        assert_eq!(Document::from_stored_json("{}"), None);
+        assert_eq!(
+            Document::from_stored_json(r#"{"version":99,"document":{"blocks":[]}}"#),
+            None
+        );
+    }
+}

@@ -27,7 +27,7 @@ Formatiert wird ausschließlich über Vorlagen. Man schreibt seitenlos; Seiten s
 |---|---|---|
 | `absatz-core` | Modell, Vorlagensätze (`stylesets/`), Codegen (Typst, CSS), Worker-Protokoll, Beispieldokumente | nur serde |
 | `absatz-typeset` | Typst-World, Setzen, SVG/Raster/PDF, Benchmark; `bin/worker.rs` ist der Web Worker | core, Typst |
-| `absatz-web` | Leptos-App (CSR): Bedienung, Worker-Anbindung; `editor/` = Schreibansicht (eigener DOM-Renderer + EditContext, kein Leptos) | core – **nie** typeset (Hauptthread bleibt klein) |
+| `absatz-web` | Leptos-App (CSR) für die Bedienung; `editor/` = Schreibansicht (eigener DOM-Renderer + EditContext), `preview.rs` = Seitenvorschau + PDF über den Worker, `storage.rs` = Autosave (OPFS) | core – **nie** typeset (Hauptthread bleibt klein) |
 
 Datenfluss: Eingabe → Modell (Hauptthread) → Schreibansicht (DOM, sofort) · Modell → `codegen::typst` → Worker → Typst → Seiten/PDF (asynchron).
 
@@ -77,5 +77,8 @@ Lokal ein vorhandenes Chrome für Playwright nutzen: `CHROME_PATH=/usr/bin/googl
 - Löschen innerhalb eines Blocks macht der Browser über die EditContext (Zeichen, Wörter, Emojis). Wir behandeln nur Löschen über Blockgrenzen.
 - Latenzmessung läuft nur, wenn `window.__absatzLatency` ein Array ist (Konsole/Test: `__absatzLatency = []`).
 - Während einer IME-Komposition (`composing`) die EditContext nie per `update_text` zurücksetzen.
+- Der `on_change`-Callback des Editors läuft, während der Editor geliehen ist: dort nur einplanen (`Preview::schedule`), nie auf das Dokument zugreifen.
+- Vorschau: höchstens eine Anfrage an den Worker gleichzeitig (`busy`/`again` in `preview.rs`); nie Anfragen stapeln.
+- Tests, die feste Positionen im Dokument brauchen, laden `?doc=1` (ohne Autosave); `./` zeigt das gespeicherte bzw. das Willkommensdokument.
 - `web-sys` braucht für jede Web-API ein Feature in `Cargo.toml`.
 - Release-Builds (LTO) dauern lange; zum Iterieren `just dev` (Dev-Profil mit optimierten Abhängigkeiten).

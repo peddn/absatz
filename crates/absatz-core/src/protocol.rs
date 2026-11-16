@@ -1,11 +1,20 @@
 //! Messages between the main thread and the typesetting worker.
-//! Sent as JSON strings via `postMessage`.
+//! Sent as JSON strings via `postMessage`; only the PDF comes back as bytes.
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type")]
 pub enum ToWorker {
+    /// Typeset `source` (if given, else keep the last one) and render the
+    /// pages `first..=last` for the preview.
+    Update {
+        source: Option<String>,
+        first: usize,
+        last: usize,
+    },
+    /// Typeset `source` and answer with the PDF bytes (a binary message).
+    Pdf { source: String },
     /// Run the typesetting benchmark on a generated sample document.
     Bench { chapters: usize },
 }
@@ -14,8 +23,18 @@ pub enum ToWorker {
 #[serde(tag = "type")]
 pub enum FromWorker {
     Ready,
+    /// Answer to `Update`. On `error` the page count and pages are those of
+    /// the last successful run (no `svgs`).
+    Pages {
+        count: usize,
+        first: usize,
+        svgs: Vec<String>,
+        error: Option<String>,
+    },
     Bench(BenchReport),
-    Error { message: String },
+    Error {
+        message: String,
+    },
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]

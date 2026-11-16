@@ -7,7 +7,7 @@ expression: "StyleSet::standard().to_css()"
 .absatz-doc .p-h1 { font-size: 22pt; color: #1a1a1a; font-weight: 700; }
 .absatz-doc .p-h2 { font-size: 15pt; color: #1f4e79; font-weight: 700; }
 .absatz-doc .p-h3 { font-size: 12pt; color: #1f4e79; font-weight: 700; }
-.absatz-doc .p-list { display: list-item; list-style-type: disc; margin-inline-start: 1.5em; }
+.absatz-doc .p-list { display: list-item; list-style: disc inside; }
 .absatz-doc .p-note { font-size: 10pt; color: #444444; padding-inline-start: 18pt; }
 .absatz-doc .p-quote { font-style: italic; padding-inline-start: 18pt; }
 .absatz-doc .c-code { font-family: "DejaVu Sans Mono", monospace; }

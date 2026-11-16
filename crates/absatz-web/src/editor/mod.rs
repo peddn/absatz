@@ -33,6 +33,25 @@ struct Editor {
     ec_block: usize,
     composing: bool,
     history: History,
+    /// Called after every change to the document.
+    on_change: Option<Box<dyn Fn()>>,
+}
+
+/// Access to a mounted editor from the rest of the app.
+#[derive(Clone)]
+pub struct Handle(Rc<RefCell<Editor>>);
+
+impl Handle {
+    /// Must not be called from inside `on_change`.
+    pub fn with_doc<R>(&self, f: impl FnOnce(&Document) -> R) -> R {
+        f(&self.0.borrow().doc)
+    }
+
+    /// `f` runs after every change. It must not call back into the editor;
+    /// schedule the work instead.
+    pub fn on_change(&self, f: impl Fn() + 'static) {
+        self.0.borrow_mut().on_change = Some(Box::new(f));
+    }
 }
 
 /// Whether this browser can edit: EditContext exists only in Chromium (≥ 121).
@@ -40,15 +59,17 @@ pub fn supported() -> bool {
     js_sys::Reflect::has(&js_sys::global(), &"EditContext".into()).unwrap_or(false)
 }
 
-/// Render the document into `root` and make it editable if [`supported`].
-pub fn mount(root: HtmlElement, doc: Document, styles: StyleSet) {
+/// Render the document into `root` and make it editable if [`supported`]
+/// (otherwise the document is only shown and `None` is returned).
+pub fn mount(root: HtmlElement, doc: &Document, styles: StyleSet) -> Option<Handle> {
     let dom = root.owner_document().expect("attached to a document");
     for block in &doc.blocks {
         let _ = root.append_child(&dom::render_block(&dom, block, &styles));
     }
     if !supported() {
-        return; // read-only; the app shows a notice (decision #2: no fallbacks)
+        return None; // read-only; the app shows a notice (decision #2: no fallbacks)
     }
+    let doc = doc.clone();
     let _ = root.set_attribute("role", "textbox");
     let _ = root.set_attribute("aria-multiline", "true");
     root.set_spellcheck(true);
@@ -67,6 +88,7 @@ pub fn mount(root: HtmlElement, doc: Document, styles: StyleSet) {
         ec_block: usize::MAX,
         composing: false,
         history: History::default(),
+        on_change: None,
     }));
     editor.borrow_mut().sync_edit_context(true);
 
@@ -90,6 +112,7 @@ pub fn mount(root: HtmlElement, doc: Document, styles: StyleSet) {
     listen(&dom, "selectionchange", &editor, |ed, _| {
         ed.on_selection_change()
     });
+    Some(Handle(editor))
 }
 
 fn listen(
@@ -315,12 +338,20 @@ impl Editor {
             time: now(),
         };
         self.history.record(&self.doc, edit);
+        self.changed();
+    }
+
+    fn changed(&self) {
+        if let Some(f) = &self.on_change {
+            f();
+        }
     }
 
     /// Show the result of undo/redo.
     fn apply(&mut self, change: Change) {
         self.rerender_range(change.at, change.removed, change.inserted);
         self.select(change.selection.0, change.selection.1);
+        self.changed();
     }
 
     fn select(&mut self, anchor: Pos, focus: Pos) {

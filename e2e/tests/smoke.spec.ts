@@ -4,7 +4,7 @@ test("app starts and renders the sample document with style-set CSS", async ({ p
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
 
-  await page.goto("./");
+  await page.goto("./?doc=1");
   await expect(page.getByRole("heading", { name: "Absatz", level: 1 })).toBeVisible();
 
   const doc = page.locator("article.absatz-doc");

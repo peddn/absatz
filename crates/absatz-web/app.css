@@ -35,12 +35,35 @@ body {
   border-radius: 6px;
 }
 
+.topbar button { font: inherit; padding: 0.2rem 0.7rem; }
+.topbar #preview-status { margin-left: auto; }
+
 .layout {
   display: grid;
-  grid-template-columns: minmax(0, 46rem) minmax(18rem, 1fr);
+  grid-template-columns: minmax(0, 46rem) minmax(16rem, 34rem);
+  justify-content: center;
   gap: 1.5rem;
   padding: 1.5rem;
 }
+
+/* Page preview: its own scroll area that stays in view while writing. */
+.preview {
+  position: sticky;
+  top: 1rem;
+  height: calc(100vh - 2rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* = PAGE_GAP in preview.rs */
+}
+.page {
+  flex: none;
+  aspect-ratio: 210 / 297;
+  background: white;
+  border: 1px solid var(--line);
+}
+.page img { display: block; width: 100%; }
+.page img:not([src]) { visibility: hidden; }
 
 .absatz-doc {
   background: white;
@@ -54,6 +77,7 @@ body {
 }
 
 .panel {
+  padding: 0 1.5rem 1.5rem;
   font-size: 0.9rem;
   & pre { white-space: pre-wrap; font-size: 0.8rem; background: white; padding: 0.8rem; border: 1px solid var(--line); }
 }

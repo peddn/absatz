@@ -52,14 +52,15 @@
 
 // Absatzvorlage anwenden. Die Rolle entscheidet über das Typst-Element.
 #let blk(id, body) = {
-  let t = s.paragraph.at(id)
+  // Unknown ids fall back to body text instead of failing the whole document.
+  let t = s.paragraph.at(id, default: s.paragraph.body)
   if t.role == "heading" {
     heading(level: t.level, body)
   } else if t.role == "list_item" {
     list.item(body)
   } else if t.role == "quote" {
     quote(block: true, text(..text-args(t), body))
-  } else if id == "body" {
+  } else if t.role == "body" {
     body
   } else {
     block(inset: (left: pt(t.at("indent", default: 0))), text(..text-args(t), body))
@@ -68,8 +69,10 @@
 
 // Zeichenvorlage anwenden.
 #let cs(id, body) = {
-  let t = s.character.at(id)
-  if t.role == "emphasis" {
+  let t = s.character.at(id, default: none)
+  if t == none {
+    body
+  } else if t.role == "emphasis" {
     emph(body)
   } else if t.role == "strong" {
     strong(body)

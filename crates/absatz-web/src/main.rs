@@ -1,44 +1,55 @@
 //! Absatz web app.
 //!
-//! URL parameters: `?doc=<chapters>` loads a sample document of that size
-//! (≈10 pages per chapter, default 1); `?bench=<chapters>` runs the
-//! typesetting benchmark in the worker right away.
+//! URL parameters (for tests and measurements):
+//! `?doc=<chapters>` opens a generated sample document (≈10 pages per
+//! chapter) instead of the saved one and turns autosave off;
+//! `?bench=<chapters>` runs the typesetting benchmark in a worker.
 
 mod editor;
+mod preview;
+mod storage;
 mod worker;
 
-use absatz_core::sample;
+use absatz_core::model::Document;
 use absatz_core::styles::StyleSet;
+use absatz_core::{codegen, sample};
 use leptos::prelude::*;
+use preview::{Preview, Snapshot};
+use wasm_bindgen::{JsCast, closure::Closure};
+use web_sys::HtmlElement;
 
 fn main() {
     console_error_panic_hook::set_once();
-    leptos::mount::mount_to_body(App);
+    wasm_bindgen_futures::spawn_local(async {
+        let (doc, autosave) = match param("doc") {
+            Some(chapters) => (sample::document(chapters).doc, false),
+            None => {
+                let saved = storage::load().await.as_string();
+                let doc = saved.and_then(|json| Document::from_stored_json(&json));
+                (doc.unwrap_or_else(sample::welcome), true)
+            }
+        };
+        leptos::mount::mount_to_body(move || view! { <App doc autosave /> });
+    });
 }
 
 #[component]
-fn App() -> impl IntoView {
+fn App(doc: Document, autosave: bool) -> impl IntoView {
     let styles = StyleSet::standard();
     let css = styles.to_css();
-    let doc = sample::document(param("doc").unwrap_or(1)).doc;
-    let doc_ref = NodeRef::<leptos::html::Article>::new();
-    let editor_styles = styles.clone();
-    doc_ref.on_load(move |el| editor::mount(el, doc, editor_styles));
-    let (report, set_report) = signal(None::<String>);
+    let lang = styles.lang.clone();
+    let bench = param("bench");
 
-    let run_bench = move |chapters: usize| {
-        set_report.set(Some(format!("Benchmark läuft ({chapters} Kapitel) …")));
-        worker::run_bench(chapters, move |text| set_report.set(Some(text)));
-    };
-    if let Some(chapters) = param("bench") {
-        run_bench(chapters);
-    }
+    let main_ref = NodeRef::<leptos::html::Main>::new();
+    main_ref.on_load(move |main| start(&main, &doc, styles, autosave));
 
     view! {
         <style>{css}</style>
         <header class="topbar">
             <h1>"Absatz"</h1>
-            <span>"M1 · Schreibkern (Spike)"</span>
+            <button id="new-doc">"Neues Dokument"</button>
+            <button id="pdf">"PDF"</button>
+            <span id="preview-status" role="status"></span>
         </header>
         {(!editor::supported()).then(|| view! {
             <p class="notice" role="alert">
@@ -46,15 +57,84 @@ fn App() -> impl IntoView {
                 "In diesem Browser kannst du das Dokument nur ansehen."
             </p>
         })}
-        <main class="layout">
-            <article class="absatz-doc" lang=styles.lang.clone() node_ref=doc_ref></article>
-            <aside class="panel">
-                <h2>"Satz-Benchmark"</h2>
-                <p>"Setzt ein generiertes Dokument mit Typst im Web Worker."</p>
-                <button on:click=move |_| run_bench(10)>"100 Seiten messen"</button>
-                <pre id="bench-result">{move || report.get()}</pre>
-            </aside>
+        <main class="layout" node_ref=main_ref>
+            <article class="absatz-doc" lang=lang></article>
+            <section class="preview" aria-label="Seitenvorschau"></section>
         </main>
+        {bench.map(|chapters| view! { <Bench chapters /> })}
+    }
+}
+
+/// Mount the editor and connect it to the preview and the buttons.
+/// Plain DOM from here on: the document area is not rendered by Leptos (#15).
+fn start(main: &HtmlElement, doc: &Document, styles: StyleSet, autosave: bool) {
+    let find = |selector: &str| {
+        main.owner_document()?
+            .query_selector(selector)
+            .ok()
+            .flatten()
+    };
+    let (Some(article), Some(pane), Some(status)) = (
+        find(".absatz-doc"),
+        find(".preview"),
+        find("#preview-status"),
+    ) else {
+        return;
+    };
+
+    let handle = editor::mount(article.unchecked_into(), doc, styles);
+    let snapshot: Box<dyn Fn() -> Snapshot> = match handle.clone() {
+        Some(handle) => Box::new(move || {
+            handle.with_doc(|doc| Snapshot {
+                source: codegen::typst(doc).source,
+                save: autosave.then(|| doc.to_stored_json()),
+            })
+        }),
+        // Read-only browsers still get the pages.
+        None => {
+            let source = codegen::typst(doc).source;
+            Box::new(move || Snapshot {
+                source: source.clone(),
+                save: None,
+            })
+        }
+    };
+    let Some(preview) = Preview::start(pane, status, snapshot) else {
+        return;
+    };
+    if let Some(handle) = handle {
+        let preview = preview.clone();
+        handle.on_change(move || preview.schedule());
+    }
+
+    on_click(find("#pdf"), move || preview.pdf());
+    on_click(find("#new-doc"), || {
+        wasm_bindgen_futures::spawn_local(async {
+            let _ = storage::save(&Document::empty().to_stored_json()).await;
+            if let Some(window) = web_sys::window() {
+                let _ = window.location().set_search("");
+            }
+        });
+    });
+}
+
+fn on_click(element: Option<web_sys::Element>, f: impl Fn() + 'static) {
+    let Some(element) = element else { return };
+    let cb = Closure::<dyn Fn()>::new(f);
+    let _ = element.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref());
+    cb.forget();
+}
+
+/// Typesetting benchmark, shown only with `?bench=<chapters>`.
+#[component]
+fn Bench(chapters: usize) -> impl IntoView {
+    let (report, set_report) = signal(format!("Benchmark läuft ({chapters} Kapitel) …"));
+    worker::run_bench(chapters, move |text| set_report.set(text));
+    view! {
+        <aside class="panel">
+            <h2>"Satz-Benchmark"</h2>
+            <pre id="bench-result">{move || report.get()}</pre>
+        </aside>
     }
 }
 
