@@ -116,6 +116,15 @@ impl StyleSet {
         Self::parse(STANDARD.tokens_json).expect("bundled style set is valid")
     }
 
+    /// Style of the block created by Enter: headings are followed by body text,
+    /// everything else continues with the same style.
+    pub fn next_style<'a>(&self, id: &'a str) -> &'a str {
+        match self.paragraph.get(id).map(|s| s.role) {
+            Some(Role::Heading) => "body",
+            _ => id,
+        }
+    }
+
     /// JSON as read by the Typst template (`styles.json`).
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).expect("style set serializes")

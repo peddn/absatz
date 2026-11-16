@@ -1,7 +1,7 @@
 # Absatz – Projektplan
 
 Leitfaden für die Umsetzung. Lebendes Dokument: Änderungen per PR, Entscheidungen zusätzlich in [`decisions.md`](decisions.md).
-Stand: 16.11.2026 · Aktueller Meilenstein: **M0 abgeschlossen → M1**
+Stand: 16.11.2026 · Aktueller Meilenstein: **M1 – Spike abgeschlossen, weiter mit Loro (M1.2)**
 
 ---
 
@@ -58,28 +58,29 @@ Eigene Satz-Engine · Canvas-Rendering der Schreibansicht · eigene Rechtschreib
 
 ## 4. Leistungsbudgets
 
-Referenz: 100-seitiges Dokument (`core::sample::document(10)`), Chromium, durchschnittlicher Laptop.
-Gemessen in M0 auf einer 2-Kern-VM (eher langsam) – Details: [`benchmarks/2026-11-typst.md`](benchmarks/2026-11-typst.md).
+Referenz: 100-seitiges Dokument (`core::sample::document(10)`) in Chromium auf dem **Referenzgerät** (Rechner des Maintainers, Arch Linux).
+Werte mit „VM“ stammen von der langsameren 2-Kern-Cloud-VM. Details: [`benchmarks/2026-11-typst.md`](benchmarks/2026-11-typst.md).
 
-| Messgröße | Budget | M0 gemessen (Chromium) | Folge |
+| Messgröße | Budget | Gemessen (Referenzgerät) | Folge |
 |---|---|---|---|
-| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | – (M1) | Hauptthread wartet nie auf Typst |
-| Tastendruck → Seitenvorschau aktuell | **≤ 250 ms** | Satz 72 ms + SVG 26 ms | Entprellen ~100 ms, nur sichtbare Seiten rendern |
+| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | VM: 1,4 ms p50 / 2,1 ms p95 (M1-Spike) | Hauptthread wartet nie auf Typst |
+| Tastendruck → Seitenvorschau aktuell | **≤ 250 ms** | Satz 49 ms + SVG 18 ms (200 S.: 97 + 21 ms) | Entprellen ~100 ms, nur sichtbare Seiten rendern |
 | Vorlagenänderung → Schreibansicht | **≤ 50 ms** | – (M1, nur CSS) | sofort sichtbar |
-| Vorlagenänderung → Seitenvorschau | **≤ 2 s** | 1,5–1,7 s (200 S.: 3,3 s) | Hinweis „wird aktualisiert“, alte Seiten bleiben stehen |
+| Vorlagenänderung → Seitenvorschau | **≤ 2 s** | 1,1–1,2 s (200 S.: 2,2–2,3 s) | Hinweis „wird aktualisiert“, alte Seiten bleiben stehen |
 | Erstes Öffnen: App bedienbar | **≤ 1 s** | Haupt-Wasm 113 KB gzip | Worker lädt im Hintergrund |
-| Erstes Öffnen: Vorschau da (100 S.) | **≤ 4 s** | Satz 2,5 s + Laden Worker | Worker verkleinern (M2), Cache per Service Worker (M4) |
-| PDF-Export (100 S.) | **≤ 1 s** | 0,6 s | – |
-| Speicher Worker (100 S.) | **≤ 500 MB** | 292 MB (200 S.: 554 MB) | `comemo::evict(1)`, unveränderte Eingaben überspringen |
-| Haupt-Wasm | **≤ 400 KB gzip** | 113 KB | Typst nie im Hauptthread |
+| Erstes Öffnen: Vorschau da (100 S.) | **≤ 4 s** | Satz 1,3 s + Laden Worker | Worker verkleinern (M2), Cache per Service Worker (M4) |
+| PDF-Export (100 S.) | **≤ 1 s** | 0,2 s | – |
+| Speicher Worker (100 S.) | **≤ 500 MB** | 292 MB (200 S.: 553 MB) | `comemo::evict(1)`, unveränderte Eingaben überspringen |
+| Haupt-Wasm | **≤ 400 KB gzip** | 118 KB | Typst nie im Hauptthread |
 | Worker-Wasm | **≤ 8 MB gzip** | 16,5 MB (inkl. 9,6 MB Schriften roh) | Schriften auslagern, Größe optimieren (M2/M3) |
 
 Wichtigste Erkenntnisse aus M0:
 
-- Typst setzt nach einer Textänderung inkrementell neu (72 ms für 100 Seiten im Browser, linear wachsend) – für die Vorschau gut, für Tipp-Latenz zu langsam. **Das bestätigt die seitenlose Schreibansicht.**
+- Typst setzt nach einer Textänderung inkrementell neu (49 ms für 100 Seiten auf dem Referenzgerät, 97 ms für 200; linear wachsend) – für die Vorschau gut, für Tipp-Latenz zu langsam. **Das bestätigt die seitenlose Schreibansicht.**
 - **Jede Vorlagenänderung lässt Typst das ganze Dokument neu setzen** (Show-/Set-Regeln stecken in jeder Stilkette). Deshalb zeigt die Schreibansicht die Änderung sofort per CSS; die Vorschau folgt.
 - Der Satz-Cache dominiert den Speicher. `evict(1)` statt `evict(10)` senkt ihn im Browser von 947 auf 292 MB ohne messbaren Zeitverlust – aber nur, wenn unveränderte Eingaben gar nicht erst gesetzt werden (sonst 1,7 s Ausreißer).
-- Sehr lange Dokumente (200+ Seiten) reißen die Vorlagen-Budgets. Für 1.0 akzeptiert; danach prüfen: Vorschau kapitelweise setzen.
+- Sehr lange Dokumente (200+ Seiten) reißen knapp die Budgets für Vorlagenänderung (2,2 s) und Speicher (553 MB). Für 1.0 akzeptiert; danach prüfen: Vorschau kapitelweise setzen.
+- Schnellere Hardware hilft beim Neusatz nach dem Tippen wenig (VM 72 ms → Referenzgerät 49 ms), bei PDF und Kaltstart viel (Faktor 2–3). Typst gehört deshalb nie zwischen Tastendruck und Bildschirm.
 
 ## 5. Architektur
 
@@ -127,7 +128,7 @@ Neue Crates nur, wenn eine dieser Regeln sonst bricht (z. B. ein eigener Pandoc-
 - **EditContext** am Dokument-Container: `textupdate` → Operation aufs Modell → gezieltes DOM-Update. Native Auswahl über die Selection-API; Zuordnung DOM ↔ (Block, Offset) über `data-block`.
 - Befehle selbst: Enter (Block teilen, Folgevorlage), Rückschritt (Blöcke verbinden), Tab (Listenebene), Vorlagenwechsel per Tastenkürzel (Strg+Alt+1–3 Überschriften, Strg+Alt+0 Textkörper, Strg+B/I für Stark/Betont), Rückgängig.
 - `content-visibility: auto` für Blöcke außerhalb des Sichtbereichs – große Dokumente ohne eigene Virtualisierung.
-- **Zu prüfen im M1-Spike:** Bleibt die Rechtschreibprüfung des Browsers mit EditContext auf DOM-Elementen aktiv? Ist Leptos' feingranulares Rendering pro Tastendruck schnell genug, oder braucht der Dokumentbereich direkte DOM-Updates? Ergebnis → `decisions.md`.
+- **Spike entschieden (#15):** Der Dokumentbereich wird direkt gerendert (`editor/dom.rs`), nicht mit Leptos. Die EditContext spiegelt nur den fokussierten Block. Offen: Rechtschreibprüfung manuell im echten Chrome bestätigen.
 
 ### 5.5 Seitenvorschau (M2)
 
@@ -169,8 +170,8 @@ Jeder Meilenstein endet mit grüner CI, aktualisiertem Plan und Tag `v0.<n>.0`.
 
 | | Ziel | Fertig, wenn … | Status |
 |---|---|---|---|
-| **M0** Gerüst | Repo, Werkzeuge, CI, Benchmark, Plan | Native und Browser-Tests grün; Benchmark nativ + Chromium dokumentiert; Pages-Deploy | ✅ fertig (lokal; Push folgt mit Repo) |
-| **M1** Schreibkern | Tippen, Absätze, Vorlagen wechseln, Rückgängig | Spike entschieden (5.4); Tippen/Enter/Rückschritt/Auswahl/IME/Einfügen (Klartext) funktionieren; Loro-Dokument mit Undo; ≤ 16 ms pro Taste bei 100 Seiten; e2e-Tests inkl. IME über CDP | offen |
+| **M0** Gerüst | Repo, Werkzeuge, CI, Benchmark, Plan | Native und Browser-Tests grün; Benchmark nativ + Chromium dokumentiert; Pages-Deploy | ✅ fertig |
+| **M1** Schreibkern | Tippen, Absätze, Vorlagen wechseln, Rückgängig | Spike entschieden (5.4); Tippen/Enter/Rückschritt/Auswahl/IME/Einfügen (Klartext) funktionieren; Loro-Dokument mit Undo; ≤ 16 ms pro Taste bei 100 Seiten; e2e-Tests inkl. IME über CDP | 🔄 Spike ✅, Loro als Nächstes |
 | **M2** Seiten | Live-Vorschau und PDF | Vorschau nur sichtbarer Seiten, entprellt, Cache; Klick-Sprung in beide Richtungen; PDF-Download; Budgets 4 eingehalten; Worker ≤ 12 MB gzip | offen |
 | **M3** Inhalte & Vorlagensätze | Alles aus 3. „Version 1.0“ außer Dateien/Austausch | Listen mit Ebenen, Fußnoten, Abbildungen, Tabellen, Formeln, Verzeichnis; 3 Vorlagensätze; Vorlagenwahl mit `appearance: base-select`; Schriften-Pipeline; axe ohne Fehler | offen |
 | **M4** Dateien & App | Speichern wie eine echte App | `.absatz`-Format, Autosave (OPFS), Öffnen/Speichern, Dateizuordnung, installierbar, offline; Versionsliste | offen |
@@ -181,7 +182,7 @@ Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (Loro-Sync über
 
 ### M1 im Detail (nächster Schritt)
 
-1. **Spike (klein, wegwerfbar erlaubt):** EditContext auf einer Leptos-gerenderten Absatzliste. Messen: Tastendruck → DOM bei 100 Seiten. Prüfen: Rechtschreibprüfung, IME (CDP `Input.imeSetComposition`), native Auswahl über Absatzgrenzen. Ergebnis als Entscheidung #15.
+1. ✅ **Spike:** EditContext + direkter DOM-Renderer, Editieroperationen in `core::edit`, e2e-Tests für Tippen, Pfeiltasten, Enter, Rückschritt, Auswahl über Blöcke, Vorlagenkürzel, IME, Latenz bei 100 Seiten. Entscheidung #15. Offen: Rechtschreibprüfung manuell bestätigen.
 2. Loro einbinden (#12): Blockliste + Text mit Zeichenvorlagen-Markierungen; Abbildung auf `model::Document`; Undo-Manager.
 3. Befehle: Enter, Rückschritt, Löschen über Absatzgrenzen, Vorlagenwechsel, Zeichenvorlage umschalten.
 4. Zwischenablage: Kopieren als Klartext + HTML (aus Rollen); Einfügen als Klartext.
@@ -213,6 +214,6 @@ Grundsatz: Für jeden behobenen Fehler zuerst ein Test, der ihn zeigt.
 
 ## 9. Offene Fragen an den Maintainer
 
-1. GitHub-Repository: Besitzer und Name (`absatz`)? Pages für die Vorschau aktivieren?
-2. Referenzgerät für die Budgets (z. B. ein bestimmtes Laptop-Modell)?
+1. ~~GitHub-Repository~~ → `peddn/absatz`, Pages aktiv.
+2. ~~Referenzgerät~~ → Rechner des Maintainers (Arch Linux, Chromium).
 3. Sollen eigene Vorlagen in 1.0 gar nicht (Plan) oder in einer einfachen Form (Duplizieren + Stellschrauben) möglich sein?

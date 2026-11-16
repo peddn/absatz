@@ -27,7 +27,7 @@ Formatiert wird ausschließlich über Vorlagen. Man schreibt seitenlos; Seiten s
 |---|---|---|
 | `absatz-core` | Modell, Vorlagensätze (`stylesets/`), Codegen (Typst, CSS), Worker-Protokoll, Beispieldokumente | nur serde |
 | `absatz-typeset` | Typst-World, Setzen, SVG/Raster/PDF, Benchmark; `bin/worker.rs` ist der Web Worker | core, Typst |
-| `absatz-web` | Leptos-App (CSR): Schreibansicht, Bedienung, Worker-Anbindung | core – **nie** typeset (Hauptthread bleibt klein) |
+| `absatz-web` | Leptos-App (CSR): Bedienung, Worker-Anbindung; `editor/` = Schreibansicht (eigener DOM-Renderer + EditContext, kein Leptos) | core – **nie** typeset (Hauptthread bleibt klein) |
 
 Datenfluss: Eingabe → Modell (Hauptthread) → Schreibansicht (DOM, sofort) · Modell → `codegen::typst` → Worker → Typst → Seiten/PDF (asynchron).
 
@@ -71,5 +71,8 @@ Lokal ein vorhandenes Chrome für Playwright nutzen: `CHROME_PATH=/usr/bin/googl
 - Jede Vorlagenänderung lässt Typst das ganze Dokument neu setzen (gemessen). Deshalb: CSS sofort, Vorschau asynchron.
 - `Typesetter::compile` überspringt unveränderte Eingaben. Nicht entfernen: Ein reiner Cache-Treffer mit `comemo::evict(1)` verwirft alle Layout-Einträge, der nächste Tastendruck setzt dann alles neu (gemessen 1,7 s statt 70 ms).
 - Worker-Nachrichten erst nach `FromWorker::Ready` senden – vorher gehen sie verloren.
+- Positionen zählen UTF-16-Einheiten (`core::edit::Pos`), eine Fußnote zählt als 1. DOM-Struktur eines Blocks kennt nur `editor/dom.rs`.
+- `selectionchange` kommt asynchron. Der `keydown`-Handler übernimmt deshalb zuerst die DOM-Auswahl; nicht entfernen, sonst landet Text nach schnellen Pfeiltasten an der falschen Stelle.
+- Während einer IME-Komposition (`composing`) die EditContext nie per `update_text` zurücksetzen.
 - `web-sys` braucht für jede Web-API ein Feature in `Cargo.toml`.
 - Release-Builds (LTO) dauern lange; zum Iterieren `just dev` (Dev-Profil mit optimierten Abhängigkeiten).

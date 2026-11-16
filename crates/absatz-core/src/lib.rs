@@ -4,6 +4,7 @@
 //! and fully testable with plain `cargo test`.
 
 pub mod codegen;
+pub mod edit;
 pub mod model;
 pub mod protocol;
 pub mod sample;
