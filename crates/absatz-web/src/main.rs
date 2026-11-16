@@ -16,7 +16,7 @@ use absatz_core::{codegen, sample};
 use leptos::prelude::*;
 use preview::{Preview, Snapshot};
 use wasm_bindgen::{JsCast, closure::Closure};
-use web_sys::HtmlElement;
+use web_sys::{HtmlElement, HtmlSelectElement};
 
 fn main() {
     console_error_panic_hook::set_once();
@@ -38,6 +38,11 @@ fn App(doc: Document, autosave: bool) -> impl IntoView {
     let styles = StyleSet::standard();
     let css = styles.to_css();
     let lang = styles.lang.clone();
+    let style_options = styles
+        .paragraph
+        .iter()
+        .map(|(id, style)| view! { <option value=id.clone()>{style.name.clone()}</option> })
+        .collect_view();
     let bench = param("bench");
 
     let main_ref = NodeRef::<leptos::html::Main>::new();
@@ -47,6 +52,7 @@ fn App(doc: Document, autosave: bool) -> impl IntoView {
         <style>{css}</style>
         <header class="topbar">
             <h1>"Absatz"</h1>
+            <select id="style" aria-label="Absatzvorlage" title="Absatzvorlage">{style_options}</select>
             <button id="new-doc">"Neues Dokument"</button>
             <button id="pdf">"PDF"</button>
             <span id="preview-status" role="status"></span>
@@ -105,10 +111,19 @@ fn start(main: &HtmlElement, doc: &Document, styles: StyleSet, autosave: bool) {
     if let Some(handle) = handle {
         let preview = preview.clone();
         handle.on_change(move || preview.schedule());
+        // Style picker: shows the style at the caret and changes it.
+        if let Some(select) = find("#style").and_then(|e| e.dyn_into::<HtmlSelectElement>().ok()) {
+            let shown = select.clone();
+            handle.on_style(move |id| shown.set_value(id));
+            let chosen = select.clone();
+            on(Some(select.into()), "change", move || {
+                handle.set_style(&chosen.value())
+            });
+        }
     }
 
-    on_click(find("#pdf"), move || preview.pdf());
-    on_click(find("#new-doc"), || {
+    on(find("#pdf"), "click", move || preview.pdf());
+    on(find("#new-doc"), "click", || {
         wasm_bindgen_futures::spawn_local(async {
             let _ = storage::save(&Document::empty().to_stored_json()).await;
             if let Some(window) = web_sys::window() {
@@ -118,10 +133,10 @@ fn start(main: &HtmlElement, doc: &Document, styles: StyleSet, autosave: bool) {
     });
 }
 
-fn on_click(element: Option<web_sys::Element>, f: impl Fn() + 'static) {
+fn on(element: Option<web_sys::Element>, event: &str, f: impl Fn() + 'static) {
     let Some(element) = element else { return };
     let cb = Closure::<dyn Fn()>::new(f);
-    let _ = element.add_event_listener_with_callback("click", cb.as_ref().unchecked_ref());
+    let _ = element.add_event_listener_with_callback(event, cb.as_ref().unchecked_ref());
     cb.forget();
 }
 

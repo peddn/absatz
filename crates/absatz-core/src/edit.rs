@@ -113,6 +113,26 @@ impl Document {
         Pos::new(at.block + 1, 0)
     }
 
+    /// Insert text that may contain line breaks (paste): every further line
+    /// becomes a new block with `new_style`; blank lines are dropped.
+    /// Returns the position after the text and the number of blocks it spans.
+    pub fn insert_lines(&mut self, at: Pos, text: &str, new_style: &str) -> (Pos, usize) {
+        let lines: Vec<&str> = if text.contains('\n') {
+            text.lines().filter(|l| !l.trim().is_empty()).collect()
+        } else {
+            vec![text]
+        };
+        let Some((first, rest)) = lines.split_first() else {
+            return (at, 1);
+        };
+        let mut pos = self.insert_text(at, first);
+        for line in rest {
+            pos = self.split_block(pos, new_style);
+            pos = self.insert_text(pos, line);
+        }
+        (pos, lines.len())
+    }
+
     pub fn set_style(&mut self, block: usize, style: &str) {
         if let Some(b) = self.blocks.get_mut(block) {
             b.style = style.to_string();
@@ -304,6 +324,16 @@ mod tests {
         );
         d.delete(Pos::new(0, 11), start);
         assert_eq!(texts(&d), ["Überschrift und Text"]);
+    }
+
+    #[test]
+    fn insert_lines_makes_blocks_and_keeps_the_tail() {
+        let mut d = doc(&["ABCD"]);
+        let (end, count) = d.insert_lines(Pos::new(0, 2), "eins\r\n\nzwei\n", "body");
+        assert_eq!(texts(&d), ["ABeins", "zweiCD"]);
+        assert_eq!((end, count), (Pos::new(1, 4), 2));
+        let (end, count) = d.insert_lines(Pos::new(0, 0), "x", "body");
+        assert_eq!((end, count), (Pos::new(0, 1), 1));
     }
 
     #[test]

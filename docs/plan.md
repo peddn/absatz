@@ -1,7 +1,7 @@
 # Absatz – Projektplan
 
 Leitfaden für die Umsetzung. Lebendes Dokument: Änderungen per PR, Entscheidungen zusätzlich in [`decisions.md`](decisions.md).
-Stand: 16.11.2026 · Aktueller Meilenstein: **Durchstich steht (Tippen → Vorschau → PDF, Autosave); als Nächstes sichtbare Vorlagenauswahl und Zwischenablage**
+Stand: 16.11.2026 · Aktueller Meilenstein: **Durchstich steht (Tippen → Vorschau → PDF, Autosave); Vorlagenauswahl und Zwischenablage fertig; als Nächstes Worker-Größe messen und aufräumen**
 
 ---
 
@@ -63,7 +63,7 @@ Werte mit „VM“ stammen von der langsameren 2-Kern-Cloud-VM. Details: [`bench
 
 | Messgröße | Budget | Gemessen (Referenzgerät) | Folge |
 |---|---|---|---|
-| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | VM: 1,4 ms p50 / 2,1 ms p95 (M1-Spike) | Hauptthread wartet nie auf Typst |
+| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | 2,3 ms p50 / 3,0 ms p95 (mit laufender Vorschau) | Hauptthread wartet nie auf Typst |
 | Tastendruck → Seitenvorschau aktuell | **≤ 250 ms** | Satz 49 ms + SVG 18 ms (200 S.: 97 + 21 ms) | Entprellen ~100 ms, nur sichtbare Seiten rendern |
 | Vorlagenänderung → Schreibansicht | **≤ 50 ms** | – (M1, nur CSS) | sofort sichtbar |
 | Vorlagenänderung → Seitenvorschau | **≤ 2 s** | 1,1–1,2 s (200 S.: 2,2–2,3 s) | Hinweis „wird aktualisiert“, alte Seiten bleiben stehen |
@@ -185,10 +185,10 @@ Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (CRDT wie Loro, 
 
 Die Meilensteine bleiben als Themen bestehen, die Reihenfolge der nächsten Schritte ändert sich:
 
-1. ✅ Tippen ändert nur den Textknoten; Löschen im Block macht der Browser (klärt die Rechtschreibprüfung – manuelle Bestätigung offen).
+1. ✅ Tippen ändert nur den Textknoten; Löschen im Block macht der Browser. Rechtschreibprüfung vom Maintainer bestätigt: Markierungen stimmen, erscheinen aber verzögert (Ursache offen).
 2. ✅ **Durchstich:** Tippen → Live-Vorschau (entprellt 100 ms, nur sichtbare Seiten, alte Seiten bleiben bei Satzfehlern stehen) → PDF-Download; automatisches Speichern im OPFS; „Neues Dokument“; Willkommensdokument. Unbekannte Vorlagen fallen auf Textkörper zurück.
    Bewusst noch nicht: Fehlerabfang für Formeln (erst wenn Formeln editierbar sind), Klick-Sprung Vorschau ↔ Text, Seiten-Cache (erst wenn gemessen nötig).
-3. **Sichtbare Vorlagenauswahl** (aktuelle Vorlage anzeigen und wählen), Einfügen und Ausschneiden.
+3. ✅ **Sichtbare Vorlagenauswahl** (zeigt die Vorlage an der Schreibmarke, ändert sie für die Auswahl), Einfügen als Klartext (Zeilen werden Absätze), Ausschneiden. Die Auswahl ist ein schlichtes `<select>`; die gestaltete Variante (`base-select`) folgt mit den Vorlagensätzen.
 4. Worker-Größe messen (Typst ohne Schriften), Budget danach festlegen; Vorratscode entfernen (Raster-Export, Benchmark-Knopf in der App).
 5. Danach: Zeichenvorlagen, weitere Inhalte.
 
