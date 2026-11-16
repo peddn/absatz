@@ -143,6 +143,50 @@ test("deleting inside a block is native: characters and whole words", async ({ p
   await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1");
 });
 
+test("style picker shows the style at the caret and changes it", async ({ page }) => {
+  const picker = page.locator("#style");
+  await blocks(page).nth(2).click(); // h2
+  await expect(picker).toHaveValue("h2");
+  await blocks(page).nth(3).click(); // body
+  await expect(picker).toHaveValue("body");
+  await picker.selectOption({ label: "Zitat" });
+  await expect(blocks(page).nth(3)).toHaveClass("p-quote");
+  await page.keyboard.type("Weiter:"); // focus is back in the text
+  await expect(blocks(page).nth(3)).toContainText("Weiter:");
+  await page.keyboard.press("Control+z");
+  await page.keyboard.press("Control+z");
+  await expect(blocks(page).nth(3)).toHaveClass("p-body");
+  await expect(picker).toHaveValue("body");
+});
+
+test("copy, cut and paste with real keys; lines become paragraphs", async ({ page }) => {
+  const count = await blocks(page).count();
+  await caret(page, 1, 0, 2, 9); // from start of the h1 to "Abschnitt| 1.1"
+  await page.keyboard.press("Control+x");
+  await expect(blocks(page)).toHaveCount(count - 1);
+  await expect(blocks(page).nth(1)).toHaveText(" 1.1");
+  await page.keyboard.press("Control+v");
+  await expect(blocks(page)).toHaveCount(count);
+  await expect(blocks(page).nth(1)).toContainText("Kapitel 1");
+  await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1");
+  await page.keyboard.press("Control+z"); // paste is one step
+  await expect(blocks(page)).toHaveCount(count - 1);
+});
+
+test("the browser never edits the DOM itself (formatting keys, no stray nodes)", async ({ page }) => {
+  await caret(page, 3, 2, 3, 12);
+  const before = await blocks(page).nth(3).innerHTML();
+  for (const key of ["Control+b", "Control+i", "Control+u"]) await page.keyboard.press(key);
+  expect(await blocks(page).nth(3).innerHTML()).toBe(before);
+  await caret(page, 3);
+  await page.keyboard.type("ab");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("cd");
+  // Only our own elements: no <div>/<br> inserted by contenteditable.
+  expect(await blocks(page).nth(4).evaluate((e) => [e.tagName, e.className, e.innerHTML])).toEqual(["P", "p-body", "cd"]);
+  expect(await page.locator("article.absatz-doc > :not(h1,h2,h3,p,blockquote,nav,figure,div.math)").count()).toBe(0);
+});
+
 test("undo and redo restore text, blocks and caret", async ({ page }) => {
   await caret(page, 2); // end of "Abschnitt 1.1"
   await page.keyboard.type(" neu");

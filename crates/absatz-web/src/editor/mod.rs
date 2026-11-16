@@ -17,9 +17,11 @@ use absatz_core::history::{Change, Edit, History, Kind, Selection};
 use absatz_core::model::{Block, Document};
 use absatz_core::styles::StyleSet;
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
-use web_sys::{Element, Event, EventTarget, HtmlElement, KeyboardEvent};
+use web_sys::{ClipboardEvent, Element, Event, EventTarget, HtmlElement, KeyboardEvent};
 
 use ffi::{CharacterBoundsUpdateEvent, EditContext, TextUpdateEvent};
+
+type StyleCallback = Box<dyn Fn(&str)>;
 
 struct Editor {
     doc: Document,
@@ -35,6 +37,9 @@ struct Editor {
     history: History,
     /// Called after every change to the document.
     on_change: Option<Box<dyn Fn()>>,
+    /// Called with the paragraph style at the caret whenever it changes.
+    on_style: Option<StyleCallback>,
+    shown_style: String,
 }
 
 /// Access to a mounted editor from the rest of the app.
@@ -51,6 +56,24 @@ impl Handle {
     /// schedule the work instead.
     pub fn on_change(&self, f: impl Fn() + 'static) {
         self.0.borrow_mut().on_change = Some(Box::new(f));
+    }
+
+    /// `f` gets the paragraph style at the caret, now and whenever it changes.
+    /// Same rule as `on_change`: it must not call back into the editor.
+    pub fn on_style(&self, f: impl Fn(&str) + 'static) {
+        let mut ed = self.0.borrow_mut();
+        ed.on_style = Some(Box::new(f));
+        ed.shown_style.clear();
+        ed.notify_style();
+    }
+
+    /// Apply a paragraph style to the selected blocks and return the focus
+    /// to the text (used by the style picker).
+    pub fn set_style(&self, style: &str) {
+        let mut ed = self.0.borrow_mut();
+        ed.apply_style(style);
+        let _ = ed.root.unchecked_ref::<HtmlElement>().focus();
+        dom::set_selection(&ed.root, ed.anchor, ed.focus);
     }
 }
 
@@ -89,6 +112,8 @@ pub fn mount(root: HtmlElement, doc: &Document, styles: StyleSet) -> Option<Hand
         composing: false,
         history: History::default(),
         on_change: None,
+        on_style: None,
+        shown_style: String::new(),
     }));
     editor.borrow_mut().sync_edit_context(true);
 
@@ -111,6 +136,12 @@ pub fn mount(root: HtmlElement, doc: &Document, styles: StyleSet) -> Option<Hand
     });
     listen(&dom, "selectionchange", &editor, |ed, _| {
         ed.on_selection_change()
+    });
+    listen(&root, "paste", &editor, |ed, ev| {
+        ed.on_paste(ev.unchecked_ref())
+    });
+    listen(&root, "cut", &editor, |ed, ev| {
+        ed.on_cut(ev.unchecked_ref())
     });
     Some(Handle(editor))
 }
@@ -261,16 +292,7 @@ impl Editor {
                     _ => return,
                 };
                 ev.prevent_default();
-                let before = self.blocks(from.block, to.block);
-                for b in from.block..=to.block {
-                    if self.doc.is_text(b) {
-                        self.doc.set_style(b, style);
-                    }
-                }
-                let count = to.block - from.block + 1;
-                self.rerender_range(from.block, count, count);
-                dom::set_selection(&self.root, self.anchor, self.focus);
-                self.record(from.block, before, count, sel_before, Kind::Other);
+                self.apply_style(style);
             }
             _ => return,
         }
@@ -298,6 +320,7 @@ impl Editor {
             self.anchor = anchor;
             self.focus = focus;
             self.sync_edit_context(false);
+            self.notify_style();
         }
     }
 
@@ -341,10 +364,88 @@ impl Editor {
         self.changed();
     }
 
-    fn changed(&self) {
+    fn changed(&mut self) {
         if let Some(f) = &self.on_change {
             f();
         }
+        self.notify_style();
+    }
+
+    /// Tell the app which paragraph style the caret is in, if that changed.
+    fn notify_style(&mut self) {
+        let Some(block) = self.doc.blocks.get(self.focus.block) else {
+            return;
+        };
+        if block.style != self.shown_style {
+            self.shown_style.clone_from(&block.style);
+            if let Some(f) = &self.on_style {
+                f(&block.style);
+            }
+        }
+    }
+
+    /// Give all selected text blocks a paragraph style (one undo step).
+    fn apply_style(&mut self, style: &str) {
+        let sel_before = (self.anchor, self.focus);
+        let (from, to) = self.ordered();
+        let before = self.blocks(from.block, to.block);
+        for b in from.block..=to.block {
+            if self.doc.is_text(b) {
+                self.doc.set_style(b, style);
+            }
+        }
+        let count = to.block - from.block + 1;
+        self.rerender_range(from.block, count, count);
+        dom::set_selection(&self.root, self.anchor, self.focus);
+        self.record(from.block, before, count, sel_before, Kind::Other);
+    }
+
+    /// Paste as plain text; lines become paragraphs.
+    fn on_paste(&mut self, ev: &ClipboardEvent) {
+        ev.prevent_default();
+        let text = ev
+            .clipboard_data()
+            .and_then(|d| d.get_data("text/plain").ok());
+        if let Some(text) = text.filter(|t| !t.is_empty()) {
+            self.replace_selection(&text);
+        }
+    }
+
+    /// Copying is native; cutting also has to remove the text from the model.
+    fn on_cut(&mut self, ev: &ClipboardEvent) {
+        ev.prevent_default();
+        if self.anchor == self.focus {
+            return;
+        }
+        let selected = self
+            .dom
+            .get_selection()
+            .ok()
+            .flatten()
+            .map(|s| String::from(s.to_string()));
+        if let (Some(data), Some(text)) = (ev.clipboard_data(), selected) {
+            let _ = data.set_data("text/plain", &text);
+        }
+        self.replace_selection("");
+    }
+
+    /// Replace the selection with text that may span several lines (one undo step).
+    fn replace_selection(&mut self, text: &str) {
+        let sel_before = (self.anchor, self.focus);
+        let (from, to) = self.ordered();
+        if !self.doc.is_text(from.block) || !self.doc.is_text(to.block) {
+            return;
+        }
+        let before = self.blocks(from.block, to.block);
+        self.doc.delete(from, to);
+        let next = self
+            .styles
+            .next_style(&self.doc.blocks[from.block].style)
+            .to_string();
+        let (end, count) = self.doc.insert_lines(from, text, &next);
+        self.rerender_range(from.block, to.block - from.block + 1, count);
+        self.select(end, end);
+        self.record(from.block, before, count, sel_before, Kind::Other);
     }
 
     /// Show the result of undo/redo.
