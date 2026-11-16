@@ -102,6 +102,36 @@ test("IME composition (CDP) commits text", async ({ page }) => {
   await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1日本!");
 });
 
+test("undo and redo restore text, blocks and caret", async ({ page }) => {
+  await caret(page, 2); // end of "Abschnitt 1.1"
+  await page.keyboard.type(" neu");
+  await page.keyboard.press("Enter");
+  await page.keyboard.type("Zeile");
+  await expect(blocks(page).nth(3)).toHaveText("Zeile");
+
+  await page.keyboard.press("Control+z"); // typing "Zeile"
+  await expect(blocks(page).nth(3)).toHaveText("");
+  await page.keyboard.press("Control+z"); // Enter
+  await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1 neu");
+  await expect(blocks(page).nth(3)).toHaveClass("p-body");
+  await page.keyboard.press("Control+z"); // typing " neu"
+  await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1");
+
+  await page.keyboard.press("Control+Shift+z");
+  await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1 neu");
+  await page.keyboard.press("Control+y");
+  await page.keyboard.type("!");
+  await expect(blocks(page).nth(3)).toHaveText("!");
+});
+
+test("undo reverts a style change", async ({ page }) => {
+  await caret(page, 3, 0);
+  await page.keyboard.press("Control+Alt+Digit2");
+  await expect(blocks(page).nth(3)).toHaveClass("p-h2");
+  await page.keyboard.press("Control+z");
+  await expect(blocks(page).nth(3)).toHaveClass("p-body");
+});
+
 test("keystroke latency on 100 pages @perf", async ({ page }) => {
   await page.goto("./?doc=10");
   await expect(blocks(page).nth(800)).toBeAttached();

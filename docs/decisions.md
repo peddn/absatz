@@ -45,7 +45,7 @@ Dev-Server, Browser-Tests und GitHub Pages nutzen denselben Pfad. Bei eigener Do
 **#11 · 2026-11-16 · gilt — Lizenz AGPL-3.0-or-later**
 Vom Maintainer gewählt. Verträglich mit den Apache/MIT-Abhängigkeiten und mit Pandoc (GPL-2.0-or-later, #13).
 
-**#12 · 2026-11-16 · geplant (M1) — Loro als Dokumentspeicher**
+**#12 · 2026-11-16 · ersetzt durch #16 — Loro als Dokumentspeicher**
 Das Dokument ist ein Loro-CRDT: Undo/Redo, Versionen, Speicherformat (Snapshot) und spätere Zusammenarbeit aus einer Hand. `model::Document` bleibt die Lesesicht für Codegen.
 
 **#13 · 2026-11-16 · geplant (M5) — Pandoc.wasm für Import/Export**
@@ -58,3 +58,8 @@ M0 bettet die Typst-Standardschriften in den Worker ein. Ab M3 laden Vorlagensä
 Der Dokumentbereich wird von `editor/dom.rs` direkt ins DOM gerendert (Kind *i* des Editors = Block *i*); Leptos rendert nur die Oberfläche drumherum. Eingaben kommen über eine EditContext, die nur den Text des fokussierten Blocks spiegelt. Positionen zählen UTF-16-Einheiten (wie DOM, EditContext und Loro); eine Fußnote zählt als eine Einheit.
 *Warum:* Pro Tastendruck genau ein Modell-Schritt und ein Block-Neurender, Auswahl danach exakt wiederherstellbar; keine doppelte Zustandshaltung in Signalen. Gemessen bei 100 Seiten (851 Blöcke): 1,4 ms (p50) / 2,1 ms (p95) Verarbeitung je Eingabe, nächster Frame nach ≤ 1 Bildwechsel.
 *Spike-Ergebnisse:* Native Caret-Navigation, Auswahl über Blockgrenzen und IME (per CDP getestet) funktionieren. `selectionchange` kommt asynchron → bei jedem `keydown` die DOM-Auswahl synchron übernehmen. `role="textbox"` + `aria-multiline` macht den Bereich zum mehrzeiligen Rich-Text-Feld, Überschriften bleiben Überschriften. Rechtschreibprüfung: im Headless-Browser nicht prüfbar, manuelle Bestätigung offen.
+
+**#16 · 2026-11-16 · gilt — Rückgängig/Wiederholen im Kern statt Loro**
+`core::history` speichert je Änderung den betroffenen Blockbereich vorher/nachher; Tippen im selben Block wird bis 1 s Pause zusammengefasst. Gespeichert wird `model::Document` als JSON (M4).
+*Warum:* Gemessen erhöht Loro das Haupt-Wasm von 118 KB auf 1 183 KB gzip – fast das Dreifache des Budgets (400 KB) – und bringt vor allem Zusammenarbeit, die erst nach 1.0 geplant ist. Das eigene Undo sind ~150 Zeilen, kostet 0,3–0,6 ms je Eingabe (p95 2,7 ms bei 100 Seiten) und keine Abhängigkeit.
+*Folge:* Für gemeinsames Bearbeiten nach 1.0 wird ein CRDT nötig. Es wird dann nur in dieser Situation nachgeladen; die wenigen Operationen in `core::edit` sind die Stelle, an der es andockt.

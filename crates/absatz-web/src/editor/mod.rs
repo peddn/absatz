@@ -3,7 +3,8 @@
 //! The browser lays out text, draws caret and selection, and runs the IME.
 //! We own the model: every input event becomes a model operation, after
 //! which the affected block elements are re-rendered and the selection is
-//! restored. The EditContext mirrors the text of the focused block only.
+//! restored. Every operation is recorded in the history (undo/redo).
+//! The EditContext mirrors the text of the focused block only.
 
 mod dom;
 mod ffi;
@@ -12,7 +13,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use absatz_core::edit::{Pos, utf16_len};
-use absatz_core::model::Document;
+use absatz_core::history::{Change, Edit, History, Kind, Selection};
+use absatz_core::model::{Block, Document};
 use absatz_core::styles::StyleSet;
 use wasm_bindgen::{JsCast, JsValue, closure::Closure};
 use web_sys::{Element, Event, EventTarget, HtmlElement, KeyboardEvent};
@@ -30,6 +32,7 @@ struct Editor {
     /// Block whose text the EditContext currently holds.
     ec_block: usize,
     composing: bool,
+    history: History,
 }
 
 pub fn mount(root: HtmlElement, doc: Document, styles: StyleSet) {
@@ -54,6 +57,7 @@ pub fn mount(root: HtmlElement, doc: Document, styles: StyleSet) {
         focus: start,
         ec_block: usize::MAX,
         composing: false,
+        history: History::default(),
     }));
     editor.borrow_mut().sync_edit_context(true);
 
@@ -107,15 +111,19 @@ impl Editor {
     fn on_text_update(&mut self, ev: &TextUpdateEvent) {
         let started = now();
         let text = ev.text().replace(['\n', '\r'], " ");
+        let sel_before = (self.anchor, self.focus);
         let (from, to) = self.ordered();
         if !self.composing && from.block != to.block {
             // The EditContext only knows the focused block; replace the whole selection.
+            let before = self.blocks(from.block, to.block);
             self.doc.delete(from, to);
             let caret = self.doc.insert_text(from, &text);
             self.rerender_range(from.block, to.block - from.block + 1, 1);
             self.select(caret, caret);
+            self.record(from.block, before, 1, sel_before, Kind::Other);
         } else {
             let b = self.ec_block;
+            let before = self.blocks(b, b);
             let (rs, re) = (
                 ev.update_range_start() as usize,
                 ev.update_range_end() as usize,
@@ -131,6 +139,7 @@ impl Editor {
                 ffi::set_highlight("ime", dom::range(&self.root, Pos::new(b, rs), end).as_ref());
             }
             self.update_bounds();
+            self.record(b, before, 1, sel_before, Kind::Typing);
         }
         record_latency(started, ev.time_stamp());
     }
@@ -144,43 +153,62 @@ impl Editor {
         // still hold an old caret. keydown always precedes the text input, so
         // take the DOM selection over synchronously here.
         self.on_selection_change();
-        let shortcut = (ev.ctrl_key() || ev.meta_key()) && ev.alt_key();
+        let ctrl = ev.ctrl_key() || ev.meta_key();
+        let sel_before = (self.anchor, self.focus);
+        let (from, to) = self.ordered();
         match ev.key().as_str() {
             "Enter" => {
                 ev.prevent_default();
-                self.delete_selection();
-                let at = self.focus;
-                if !self.doc.is_text(at.block) {
+                if !self.doc.is_text(from.block) {
                     return;
                 }
+                let before = self.blocks(from.block, to.block);
+                self.doc.delete(from, to);
                 let next = self
                     .styles
-                    .next_style(&self.doc.blocks[at.block].style)
+                    .next_style(&self.doc.blocks[from.block].style)
                     .to_string();
-                let new = self.doc.split_block(at, &next);
-                self.rerender_range(at.block, 1, 2);
+                let new = self.doc.split_block(from, &next);
+                self.rerender_range(from.block, to.block - from.block + 1, 2);
                 self.select(new, new);
+                self.record(from.block, before, 2, sel_before, Kind::Other);
             }
             key @ ("Backspace" | "Delete") => {
                 ev.prevent_default();
-                if !self.delete_selection() {
+                let (from, to) = if from != to {
+                    (from, to)
+                } else {
                     let Some(other) = self.doc.step(self.focus, key == "Delete") else {
                         return;
                     };
                     if other.block.abs_diff(self.focus.block) > 1 {
                         return; // never swallow a table or formula in between
                     }
-                    let (from, to) = if other < self.focus {
+                    if other < self.focus {
                         (other, self.focus)
                     } else {
                         (self.focus, other)
-                    };
-                    self.doc.delete(from, to);
-                    self.rerender_range(from.block, to.block - from.block + 1, 1);
-                    self.select(from, from);
+                    }
+                };
+                let before = self.blocks(from.block, to.block);
+                self.doc.delete(from, to);
+                self.rerender_range(from.block, to.block - from.block + 1, 1);
+                self.select(from, from);
+                self.record(from.block, before, 1, sel_before, Kind::Other);
+            }
+            "z" | "Z" | "y" if ctrl && !ev.alt_key() => {
+                ev.prevent_default();
+                let redo = ev.key() == "y" || ev.shift_key();
+                let change = if redo {
+                    self.history.redo(&mut self.doc)
+                } else {
+                    self.history.undo(&mut self.doc)
+                };
+                if let Some(change) = change {
+                    self.apply(change);
                 }
             }
-            _ if shortcut => {
+            _ if ctrl && ev.alt_key() => {
                 let style = match ev.code().as_str() {
                     "Digit0" => "body",
                     "Digit1" => "h1",
@@ -189,14 +217,16 @@ impl Editor {
                     _ => return,
                 };
                 ev.prevent_default();
-                let (from, to) = self.ordered();
+                let before = self.blocks(from.block, to.block);
                 for b in from.block..=to.block {
                     if self.doc.is_text(b) {
                         self.doc.set_style(b, style);
-                        self.rerender_range(b, 1, 1);
                     }
                 }
+                let count = to.block - from.block + 1;
+                self.rerender_range(from.block, count, count);
                 dom::set_selection(&self.root, self.anchor, self.focus);
+                self.record(from.block, before, count, sel_before, Kind::Other);
             }
             _ => return,
         }
@@ -239,16 +269,37 @@ impl Editor {
         self.ec.update_character_bounds(ev.range_start(), &bounds);
     }
 
-    /// Delete a non-empty selection. Returns whether something was deleted.
-    fn delete_selection(&mut self) -> bool {
-        let (from, to) = self.ordered();
-        if from == to {
-            return false;
-        }
-        self.doc.delete(from, to);
-        self.rerender_range(from.block, to.block - from.block + 1, 1);
-        self.select(from, from);
-        true
+    /// Copy of blocks `first..=last`, taken before an edit for the history.
+    fn blocks(&self, first: usize, last: usize) -> Vec<Block> {
+        self.doc.blocks[first..=last].to_vec()
+    }
+
+    /// Record an already applied edit; the current selection is the one after it.
+    fn record(
+        &mut self,
+        at: usize,
+        before: Vec<Block>,
+        inserted: usize,
+        sel_before: Selection,
+        kind: Kind,
+    ) {
+        let sel_after = (self.anchor, self.focus);
+        let edit = Edit {
+            at,
+            before,
+            inserted,
+            sel_before,
+            sel_after,
+            kind,
+            time: now(),
+        };
+        self.history.record(&self.doc, edit);
+    }
+
+    /// Show the result of undo/redo.
+    fn apply(&mut self, change: Change) {
+        self.rerender_range(change.at, change.removed, change.inserted);
+        self.select(change.selection.0, change.selection.1);
     }
 
     fn select(&mut self, anchor: Pos, focus: Pos) {
