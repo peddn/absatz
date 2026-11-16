@@ -115,6 +115,23 @@ mod tests {
     use absatz_core::{codegen, styles};
 
     #[test]
+    fn unknown_styles_fall_back_and_errors_keep_last_pages() {
+        use absatz_core::model::Inline;
+        let doc = Document {
+            blocks: vec![
+                Block::para("gibt-es-nicht", "Absatz"),
+                Block::text("body", vec![Inline::styled("x", "auch-nicht")]),
+            ],
+        };
+        let mut ts = Typesetter::new(&styles::STANDARD);
+        ts.set_source(&codegen::typst(&doc).source);
+        ts.compile().expect("falls back to body");
+        ts.set_source("#this-is-not-defined");
+        assert!(ts.compile().is_err());
+        assert_eq!(ts.page_count(), 1, "last good pages stay available");
+    }
+
+    #[test]
     fn compiles_small_document() {
         let doc = Document {
             blocks: vec![

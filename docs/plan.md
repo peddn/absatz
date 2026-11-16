@@ -1,7 +1,7 @@
 # Absatz – Projektplan
 
 Leitfaden für die Umsetzung. Lebendes Dokument: Änderungen per PR, Entscheidungen zusätzlich in [`decisions.md`](decisions.md).
-Stand: 16.11.2026 · Aktueller Meilenstein: **M1 – Spike und Undo fertig, als Nächstes der Durchstich (Tippen → Vorschau → PDF)**
+Stand: 16.11.2026 · Aktueller Meilenstein: **Durchstich steht (Tippen → Vorschau → PDF, Autosave); als Nächstes sichtbare Vorlagenauswahl und Zwischenablage**
 
 ---
 
@@ -71,7 +71,7 @@ Werte mit „VM“ stammen von der langsameren 2-Kern-Cloud-VM. Details: [`bench
 | Erstes Öffnen: Vorschau da (100 S.) | **≤ 4 s** | Satz 1,3 s + Laden Worker | Worker verkleinern (M2), Cache per Service Worker (M4) |
 | PDF-Export (100 S.) | **≤ 1 s** | 0,2 s | – |
 | Speicher Worker (100 S.) | **≤ 500 MB** | 292 MB (200 S.: 553 MB) | `comemo::evict(1)`, unveränderte Eingaben überspringen |
-| Haupt-Wasm | **≤ 400 KB gzip** | 118 KB | Typst nie im Hauptthread |
+| Haupt-Wasm | **≤ 400 KB gzip** | 139 KB | Typst nie im Hauptthread |
 | Worker-Wasm | **≤ 8 MB gzip** | 16,5 MB (inkl. 9,6 MB Schriften roh) | Schriften auslagern, Größe optimieren (M2/M3) |
 
 Wichtigste Erkenntnisse aus M0:
@@ -186,7 +186,8 @@ Nach 1.0: Kommentare, Versionsvergleich, gemeinsames Bearbeiten (CRDT wie Loro, 
 Die Meilensteine bleiben als Themen bestehen, die Reihenfolge der nächsten Schritte ändert sich:
 
 1. ✅ Tippen ändert nur den Textknoten; Löschen im Block macht der Browser (klärt die Rechtschreibprüfung – manuelle Bestätigung offen).
-2. **Durchstich:** Tippen → Live-Vorschau → PDF, Fehler je Block abfangen (kaputte Formel, unbekannte Vorlage), automatisches Speichern (OPFS).
+2. ✅ **Durchstich:** Tippen → Live-Vorschau (entprellt 100 ms, nur sichtbare Seiten, alte Seiten bleiben bei Satzfehlern stehen) → PDF-Download; automatisches Speichern im OPFS; „Neues Dokument“; Willkommensdokument. Unbekannte Vorlagen fallen auf Textkörper zurück.
+   Bewusst noch nicht: Fehlerabfang für Formeln (erst wenn Formeln editierbar sind), Klick-Sprung Vorschau ↔ Text, Seiten-Cache (erst wenn gemessen nötig).
 3. **Sichtbare Vorlagenauswahl** (aktuelle Vorlage anzeigen und wählen), Einfügen und Ausschneiden.
 4. Worker-Größe messen (Typst ohne Schriften), Budget danach festlegen; Vorratscode entfernen (Raster-Export, Benchmark-Knopf in der App).
 5. Danach: Zeichenvorlagen, weitere Inhalte.

@@ -35,7 +35,7 @@ async function caret(page: Page, index: number, offset: "end" | number = "end", 
 }
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("./");
+  await page.goto("./?doc=1");
   await expect(blocks(page).nth(2)).toBeVisible();
 });
 
@@ -43,7 +43,7 @@ test("browsers without EditContext get a clear notice, no crash", async ({ page 
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.addInitScript(() => delete (window as any).EditContext);
-  await page.goto("./");
+  await page.goto("./?doc=1");
   await expect(page.getByRole("alert")).toContainText("Chrome, Edge oder Chromium");
   await expect(blocks(page).nth(2)).toHaveText("Abschnitt 1.1");
   expect(errors).toEqual([]);

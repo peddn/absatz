@@ -212,7 +212,8 @@ fn paragraph_decls(style: &ParagraphStyle) -> String {
         });
     }
     if style.role == Role::ListItem {
-        d.push_str("display: list-item; list-style-type: disc; margin-inline-start: 1.5em; ");
+        // `inside`: blocks use `content-visibility`, which clips outside markers.
+        d.push_str("display: list-item; list-style: disc inside; ");
     }
     d
 }
