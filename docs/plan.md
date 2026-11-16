@@ -58,28 +58,29 @@ Eigene Satz-Engine · Canvas-Rendering der Schreibansicht · eigene Rechtschreib
 
 ## 4. Leistungsbudgets
 
-Referenz: 100-seitiges Dokument (`core::sample::document(10)`), Chromium, durchschnittlicher Laptop.
-Gemessen in M0 auf einer 2-Kern-VM (eher langsam) – Details: [`benchmarks/2026-11-typst.md`](benchmarks/2026-11-typst.md).
+Referenz: 100-seitiges Dokument (`core::sample::document(10)`) in Chromium auf dem **Referenzgerät** (Rechner des Maintainers, Arch Linux).
+Werte mit „VM“ stammen von der langsameren 2-Kern-Cloud-VM. Details: [`benchmarks/2026-11-typst.md`](benchmarks/2026-11-typst.md).
 
-| Messgröße | Budget | M0 gemessen (Chromium) | Folge |
+| Messgröße | Budget | Gemessen (Referenzgerät) | Folge |
 |---|---|---|---|
-| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | 1,4 ms p50 / 2,1 ms p95 (M1-Spike) | Hauptthread wartet nie auf Typst |
-| Tastendruck → Seitenvorschau aktuell | **≤ 250 ms** | Satz 72 ms + SVG 26 ms | Entprellen ~100 ms, nur sichtbare Seiten rendern |
+| Tastendruck → Schreibansicht aktualisiert | **≤ 16 ms** | VM: 1,4 ms p50 / 2,1 ms p95 (M1-Spike) | Hauptthread wartet nie auf Typst |
+| Tastendruck → Seitenvorschau aktuell | **≤ 250 ms** | Satz 49 ms + SVG 18 ms (200 S.: 97 + 21 ms) | Entprellen ~100 ms, nur sichtbare Seiten rendern |
 | Vorlagenänderung → Schreibansicht | **≤ 50 ms** | – (M1, nur CSS) | sofort sichtbar |
-| Vorlagenänderung → Seitenvorschau | **≤ 2 s** | 1,5–1,7 s (200 S.: 3,3 s) | Hinweis „wird aktualisiert“, alte Seiten bleiben stehen |
+| Vorlagenänderung → Seitenvorschau | **≤ 2 s** | 1,1–1,2 s (200 S.: 2,2–2,3 s) | Hinweis „wird aktualisiert“, alte Seiten bleiben stehen |
 | Erstes Öffnen: App bedienbar | **≤ 1 s** | Haupt-Wasm 113 KB gzip | Worker lädt im Hintergrund |
-| Erstes Öffnen: Vorschau da (100 S.) | **≤ 4 s** | Satz 2,5 s + Laden Worker | Worker verkleinern (M2), Cache per Service Worker (M4) |
-| PDF-Export (100 S.) | **≤ 1 s** | 0,6 s | – |
-| Speicher Worker (100 S.) | **≤ 500 MB** | 292 MB (200 S.: 554 MB) | `comemo::evict(1)`, unveränderte Eingaben überspringen |
-| Haupt-Wasm | **≤ 400 KB gzip** | 113 KB | Typst nie im Hauptthread |
+| Erstes Öffnen: Vorschau da (100 S.) | **≤ 4 s** | Satz 1,3 s + Laden Worker | Worker verkleinern (M2), Cache per Service Worker (M4) |
+| PDF-Export (100 S.) | **≤ 1 s** | 0,2 s | – |
+| Speicher Worker (100 S.) | **≤ 500 MB** | 292 MB (200 S.: 553 MB) | `comemo::evict(1)`, unveränderte Eingaben überspringen |
+| Haupt-Wasm | **≤ 400 KB gzip** | 118 KB | Typst nie im Hauptthread |
 | Worker-Wasm | **≤ 8 MB gzip** | 16,5 MB (inkl. 9,6 MB Schriften roh) | Schriften auslagern, Größe optimieren (M2/M3) |
 
 Wichtigste Erkenntnisse aus M0:
 
-- Typst setzt nach einer Textänderung inkrementell neu (72 ms für 100 Seiten im Browser, linear wachsend) – für die Vorschau gut, für Tipp-Latenz zu langsam. **Das bestätigt die seitenlose Schreibansicht.**
+- Typst setzt nach einer Textänderung inkrementell neu (49 ms für 100 Seiten auf dem Referenzgerät, 97 ms für 200; linear wachsend) – für die Vorschau gut, für Tipp-Latenz zu langsam. **Das bestätigt die seitenlose Schreibansicht.**
 - **Jede Vorlagenänderung lässt Typst das ganze Dokument neu setzen** (Show-/Set-Regeln stecken in jeder Stilkette). Deshalb zeigt die Schreibansicht die Änderung sofort per CSS; die Vorschau folgt.
 - Der Satz-Cache dominiert den Speicher. `evict(1)` statt `evict(10)` senkt ihn im Browser von 947 auf 292 MB ohne messbaren Zeitverlust – aber nur, wenn unveränderte Eingaben gar nicht erst gesetzt werden (sonst 1,7 s Ausreißer).
-- Sehr lange Dokumente (200+ Seiten) reißen die Vorlagen-Budgets. Für 1.0 akzeptiert; danach prüfen: Vorschau kapitelweise setzen.
+- Sehr lange Dokumente (200+ Seiten) reißen knapp die Budgets für Vorlagenänderung (2,2 s) und Speicher (553 MB). Für 1.0 akzeptiert; danach prüfen: Vorschau kapitelweise setzen.
+- Schnellere Hardware hilft beim Neusatz nach dem Tippen wenig (VM 72 ms → Referenzgerät 49 ms), bei PDF und Kaltstart viel (Faktor 2–3). Typst gehört deshalb nie zwischen Tastendruck und Bildschirm.
 
 ## 5. Architektur
 
@@ -213,6 +214,6 @@ Grundsatz: Für jeden behobenen Fehler zuerst ein Test, der ihn zeigt.
 
 ## 9. Offene Fragen an den Maintainer
 
-1. GitHub-Repository: Besitzer und Name (`absatz`)? Pages für die Vorschau aktivieren?
-2. Referenzgerät für die Budgets (z. B. ein bestimmtes Laptop-Modell)?
+1. ~~GitHub-Repository~~ → `peddn/absatz`, Pages aktiv.
+2. ~~Referenzgerät~~ → Rechner des Maintainers (Arch Linux, Chromium).
 3. Sollen eigene Vorlagen in 1.0 gar nicht (Plan) oder in einer einfachen Form (Duplizieren + Stellschrauben) möglich sein?
