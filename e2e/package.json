@@ -1,0 +1,12 @@
+{
+  "name": "absatz-e2e",
+  "private": true,
+  "description": "Browser tests for Absatz (Chromium only).",
+  "scripts": {
+    "test": "playwright test --grep-invert @bench",
+    "bench": "playwright test --grep @bench"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.65.1"
+  }
+}

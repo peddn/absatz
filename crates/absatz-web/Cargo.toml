@@ -1,0 +1,26 @@
+[package]
+name = "absatz-web"
+description = "The Absatz web app (Leptos, client-side rendered). Built with Trunk."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+absatz-core.workspace = true
+leptos.workspace = true
+wasm-bindgen.workspace = true
+web-sys = { workspace = true, features = [
+    "Location",
+    "MessageEvent",
+    "UrlSearchParams",
+    "Window",
+    "Worker",
+    "WorkerOptions",
+    "WorkerType",
+] }
+console_error_panic_hook.workspace = true
+
+[lints]
+workspace = true

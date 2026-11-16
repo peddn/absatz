@@ -1,0 +1,6 @@
+# Same public URL everywhere (dev server, e2e, GitHub Pages): /absatz/
+[build]
+public_url = "/absatz/"
+
+[serve]
+port = 8080

@@ -1,0 +1,15 @@
+---
+source: crates/absatz-core/src/styles.rs
+expression: "StyleSet::standard().to_css()"
+---
+.absatz-doc { font-family: "Libertinus Serif", serif; hyphens: auto; font-size: 11pt; line-height: 1.65; }
+.absatz-doc .p-body { font-size: 11pt; line-height: 1.65; margin-block-end: 8pt; text-align: justify; }
+.absatz-doc .p-h1 { font-size: 22pt; color: #1a1a1a; font-weight: 700; }
+.absatz-doc .p-h2 { font-size: 15pt; color: #1f4e79; font-weight: 700; }
+.absatz-doc .p-h3 { font-size: 12pt; color: #1f4e79; font-weight: 700; }
+.absatz-doc .p-list { display: list-item; list-style-type: disc; margin-inline-start: 1.5em; }
+.absatz-doc .p-note { font-size: 10pt; color: #444444; padding-inline-start: 18pt; }
+.absatz-doc .p-quote { font-style: italic; padding-inline-start: 18pt; }
+.absatz-doc .c-code { font-family: "DejaVu Sans Mono", monospace; }
+.absatz-doc .c-emphasis { font-style: italic; }
+.absatz-doc .c-strong { font-weight: 700; }
